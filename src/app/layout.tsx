@@ -17,7 +17,7 @@ export default function Layout({ children }: { children: ReactNode }) {
   return <html lang="uz" suppressHydrationWarning>
     <head><script dangerouslySetInnerHTML={{ __html: themeScript }} /></head>
     <body><LocaleProvider>
-      <ViewportExperience schedule={<main id="main"><Tournaments initial={[]} view="schedule" /></main>}>
+      <ViewportExperience schedule={<main><Tournaments initial={[]} view="schedule" /></main>}>
         <SkipLink />
         <Header />
         <main id="main">{children}</main>

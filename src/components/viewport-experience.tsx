@@ -15,6 +15,9 @@ export function isCompactViewport() {
 }
 
 export function ViewportExperience({ children, schedule }: { children: ReactNode; schedule: ReactNode }) {
-  const compact = useSyncExternalStore(subscribe, isCompactViewport, () => false);
-  return compact ? schedule : <div className="desktop-experience">{children}</div>;
+  const compact = useSyncExternalStore(subscribe, isCompactViewport, () => null);
+  return <>
+    {compact !== true && <div className="desktop-experience">{children}</div>}
+    {compact !== false && <div className="compact-experience">{schedule}</div>}
+  </>;
 }

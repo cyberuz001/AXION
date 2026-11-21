@@ -188,9 +188,11 @@ svg { flex: none; }
 .compact-events time { display: block; margin-block: 5px 8px; font-weight: 730; font-variant-numeric: tabular-nums; }
 .compact-events time span, .compact-events p { color: var(--muted); overflow-wrap: anywhere; }
 .compact-message .button { margin-top: 12px; }
+.compact-experience { display: none; }
 
 @media (max-width: 767px), (hover: none) and (pointer: coarse) {
   .desktop-experience { display: none; }
+  .compact-experience { display: block; }
 }
 
 .tournaments-section { padding: clamp(65px, 8vw, 118px) 0 104px; border-top: 1px solid var(--line); scroll-margin-top: var(--header); }
