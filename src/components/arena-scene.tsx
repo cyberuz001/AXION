@@ -9,32 +9,9 @@ import ScrollReveal from "./react-bits/ScrollReveal";
 import DotGrid from "./react-bits/DotGrid";
 import StarBorder from "./react-bits/StarBorder";
 import { useLocale } from "./locale";
+import { isCompactViewport } from "./viewport-experience";
 
 type Arena = "cs2" | "fighter" | "valorant";
-const mediaChunkSize = 768 * 1024;
-
-async function bufferFilm(path: string, signal: AbortSignal, segmented: boolean) {
-  const first = await fetch(path, { signal, headers: segmented ? { Range: `bytes=0-${mediaChunkSize - 1}` } : undefined });
-  if (!first.ok) throw new Error("Could not buffer the clip");
-  if (!segmented || first.status === 200) return first.blob();
-
-  const range = /^bytes 0-(\d+)\/(\d+)$/.exec(first.headers.get("Content-Range") ?? "");
-  if (!range) throw new Error("Missing clip byte range");
-
-  const start = Number(range[1]) + 1;
-  const length = Number(range[2]);
-  const chunks = Array.from({ length: Math.ceil((length - start) / mediaChunkSize) }, (_, index) => {
-    const from = start + index * mediaChunkSize;
-    const to = Math.min(from + mediaChunkSize, length) - 1;
-    return fetch(path, { signal, headers: { Range: `bytes=${from}-${to}` } }).then((response) => {
-      if (response.headers.get("Content-Range") !== `bytes ${from}-${to}/${length}` || response.status !== 206) {
-        throw new Error("Unexpected clip byte range");
-      }
-      return response.arrayBuffer();
-    });
-  });
-  return new Blob(await Promise.all([first.arrayBuffer(), ...chunks]), { type: "video/mp4" });
-}
 
 const scenes = {
   cs2: {
@@ -44,6 +21,7 @@ const scenes = {
     detail: "O‘zbekiston kibersport turnirlari",
     action: "Turnirlarni ko‘rish",
     target: "/turnirlar",
+    next: "VALORANT",
   },
   fighter: {
     name: "CS2",
@@ -52,6 +30,7 @@ const scenes = {
     detail: "Counter-Strike 2 turnirlari",
     action: "CS2 turnirlari",
     target: "/turnirlar?oyin=cs2",
+    next: "TURNIRLAR.",
   },
   valorant: {
     name: "VALORANT",
@@ -60,6 +39,7 @@ const scenes = {
     detail: "Jamoang bilan turnirga kir.",
     action: "VALORANT turnirlari",
     target: "/turnirlar?oyin=valorant",
+    next: "ARENALAR.",
   },
 };
 
@@ -80,56 +60,26 @@ export function ArenaScene({ game }: { game: Arena }) {
     offset: ["start start", "end end"],
     trackContentSize: true,
   });
-  const stageTransform = useTransform(scrollYProgress, [0, 0.22, 0.62, 0.86, 1], [
-    "translate3d(0, 0svh, 0)",
-    "translate3d(0, -13svh, 0)",
-    "translate3d(0, -33svh, 0)",
-    "translate3d(0, -47svh, 0)",
-    "translate3d(0, -102svh, 0)",
-  ]);
-  const filmTransform = useTransform(scrollYProgress, [0, 0.62, 0.86, 1], [
-    "translate3d(0, 0svh, 0) scale(1)",
+  const filmTransform = useTransform(scrollYProgress, [0, 0.26, 0.59, 0.8, 1], [
+    "translate3d(0, 0svh, 0) scale(1.03)",
     "translate3d(0, 13svh, 0) scale(1.04)",
-    "translate3d(0, 23svh, 0) scale(1.09)",
-    "translate3d(0, 24svh, 0) scale(1.11)",
+    "translate3d(0, 31svh, 0) scale(1.06)",
+    "translate3d(0, 53svh, 0) scale(1.1)",
+    "translate3d(0, 88svh, 0) scale(1.12)",
   ]);
-  const copyTransform = useTransform(scrollYProgress, [0, 0.68], [
-    "translate3d(0, 0svh, 0)",
-    "translate3d(0, -29svh, 0)",
-  ]);
-  const copyOpacity = useTransform(scrollYProgress, [0, 0.1, 0.57, 0.73, 1], [1, 1, 0.28, 0, 0]);
-  const lightTransform = useTransform(scrollYProgress, [0.68, 1], ["translateX(-56%)", "translateX(56%)"]);
-  const lightOpacity = useTransform(scrollYProgress, [0.68, 0.84, 1], [0, 0.19, 0]);
+  const filmOpacity = useTransform(scrollYProgress, [0, 0.6, 0.83, 0.92], [1, 1, 0.68, 0]);
+  const copyY = useTransform(scrollYProgress, [0, 0.53], ["0svh", "-27svh"]);
+  const copyOpacity = useTransform(scrollYProgress, [0, 0.08, 0.37, 0.53], [1, 1, 0.48, 0]);
+  const lightTransform = useTransform(scrollYProgress, [0.58, 0.96], ["translateX(-56%)", "translateX(56%)"]);
+  const lightOpacity = useTransform(scrollYProgress, [0.58, 0.74, 0.92], [0, 0.28, 0]);
+  const handoffOpacity = useTransform(scrollYProgress, [0.63, 0.83, 0.96, 1], [0, 1, 1, 0.82]);
+  const handoffY = useTransform(scrollYProgress, [0.63, 0.91, 1], ["18svh", "0svh", "-13svh"]);
+  const handoffMask = useTransform(scrollYProgress, [0.64, 0.82], ["inset(0 55% 0 0)", "inset(0 0% 0 0)"]);
   const trackProgress = useSpring(scrollYProgress, { stiffness: 145, damping: 32, restDelta: 0.001 });
 
   useEffect(() => {
-    if (!shouldLoad) return;
-    const mobile = window.matchMedia("(max-width: 720px)").matches;
-    const path = `/media/${game}${mobile ? "-mobile" : ""}.mp4`;
-    if (!mobile && game !== "cs2") {
-      setSource(path);
-      return;
-    }
-
-    const request = new AbortController();
-    const timeout = window.setTimeout(() => request.abort(), 38000);
-    let disposed = false;
-    let objectUrl: string | undefined;
-    // Buffer the scroll clip so reversing direction does not interrupt an outstanding media request.
-    void bufferFilm(path, request.signal, !mobile).then((movie) => {
-      if (disposed) return;
-      objectUrl = URL.createObjectURL(movie);
-      setSource(objectUrl);
-    }).catch(() => {
-      request.abort();
-      if (!disposed) setSource(path);
-    }).finally(() => window.clearTimeout(timeout));
-    return () => {
-      disposed = true;
-      window.clearTimeout(timeout);
-      request.abort();
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
-    };
+    // Let the browser decode the first frames while the rest of the clip downloads.
+    setSource(shouldLoad && !isCompactViewport() ? `/media/${game}.mp4` : undefined);
   }, [game, shouldLoad]);
 
   const syncFrame: () => void = useCallback(() => {
@@ -137,7 +87,7 @@ export function ArenaScene({ game }: { game: Arena }) {
     if (reducedMotion || !media || media.readyState < HTMLMediaElement.HAVE_METADATA ||
         !Number.isFinite(media.duration) || media.duration <= 0) return;
 
-    const time = scrollYProgress.get() * Math.max(0, media.duration - 0.045);
+    const time = Math.min(scrollYProgress.get() / 0.9, 1) * Math.max(0, media.duration - 0.045);
     if (Math.abs(media.currentTime - time) < 0.016) return;
 
     const now = performance.now();
@@ -157,7 +107,7 @@ export function ArenaScene({ game }: { game: Arena }) {
 
   useMotionValueEvent(scrollYProgress, "change", (progress) => {
     syncFrame();
-    const visible = progress < 0.7;
+    const visible = progress < 0.49;
     if (visible !== introVisible) setIntroVisible(visible);
   });
   useEffect(() => {
@@ -170,8 +120,8 @@ export function ArenaScene({ game }: { game: Arena }) {
 
   return <section className={`arena arena-${game}`} id={game} ref={chapter} aria-label={scene.name}>
     <div className="arena-window">
-      <motion.div className="arena-screen" style={reducedMotion ? undefined : { transform: stageTransform }}>
-        <motion.div className="arena-visual" style={reducedMotion ? undefined : { transform: filmTransform }}>
+      <div className="arena-screen">
+        <motion.div className="arena-visual" style={reducedMotion ? undefined : { transform: filmTransform, opacity: filmOpacity }}>
           <video ref={video} src={source} poster={`/media/${game}.webp`}
             preload={source ? "auto" : "none"} muted playsInline disablePictureInPicture disableRemotePlayback
             aria-hidden="true" onLoadedMetadata={syncFrame} onLoadedData={syncFrame} onSeeked={syncFrame} />
@@ -183,7 +133,7 @@ export function ArenaScene({ game }: { game: Arena }) {
         <motion.div className="arena-sheen" aria-hidden="true" style={reducedMotion ? undefined : { transform: lightTransform, opacity: lightOpacity }} />
         <div className="shell arena-content">
           <motion.div className="arena-copy"
-            style={reducedMotion ? undefined : { transform: copyTransform, opacity: copyOpacity }}>
+            style={reducedMotion ? undefined : { y: copyY, opacity: copyOpacity }}>
             <div className="arena-game"><span aria-hidden="true" />{scene.name}</div>
             {game !== "valorant" ? <h1 key={locale}><BlurText text={t(scene.title)} stepDuration={0.19} trigger="load" className="title-line" />
               <BlurText text={t(scene.highlight)} stepDuration={0.22} trigger="load" className="title-line" /></h1> :
@@ -199,6 +149,10 @@ export function ArenaScene({ game }: { game: Arena }) {
             </div>
           </motion.div>
         </div>
+      </div>
+      <motion.div className="shell arena-handoff" aria-hidden="true"
+        style={{ opacity: handoffOpacity, y: handoffY, clipPath: handoffMask }}>
+        <span>{t(scene.next)}</span>
       </motion.div>
       <div className="shell arena-progress" aria-hidden="true">
         <div className="scene-tracker">

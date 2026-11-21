@@ -10,8 +10,9 @@ import GlareHover from "./react-bits/GlareHover";
 import FadeContent from "./react-bits/FadeContent";
 import { useLocale } from "./locale";
 import { OptionSelect } from "./option-select";
+import { isCompactViewport } from "./viewport-experience";
 
-type View = "preview" | "directory" | "dashboard";
+type View = "preview" | "directory" | "dashboard" | "schedule";
 type Mode = "demo" | "shared" | "loading";
 type Filter = Game | "all";
 type Modal =
@@ -62,6 +63,7 @@ export function Tournaments({ initial, view, initialFilter = "all" }: {
   const pending = useRef(false);
   const dashboard = view === "dashboard";
   const preview = view === "preview";
+  const schedule = view === "schedule";
 
   const refresh = useCallback(async () => {
     setFailure("");
@@ -76,11 +78,12 @@ export function Tournaments({ initial, view, initialFilter = "all" }: {
   }, []);
 
   useEffect(() => {
+    if (isCompactViewport() !== schedule) return;
     void refresh();
     const sync = (event: StorageEvent) => { if (event.key === storageKey) void refresh(); };
     window.addEventListener("storage", sync);
     return () => window.removeEventListener("storage", sync);
-  }, [refresh]);
+  }, [refresh, schedule]);
 
   async function run(task: () => Promise<void>): Promise<boolean> {
     if (pending.current) return false;
@@ -132,6 +135,27 @@ export function Tournaments({ initial, view, initialFilter = "all" }: {
   const visible = items.filter((item) => (filter === "all" || item.game === filter) &&
     (status === "all" || item.status === status) && item.title.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()));
   const cards = preview ? visible.slice(0, 3) : visible;
+
+  if (schedule) {
+    const time = new Intl.DateTimeFormat(locale === "uz" ? "uz-UZ" : "en-GB", {
+      hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZone: "Asia/Tashkent",
+    });
+    const chronological = [...items].sort((a, b) => Date.parse(a.date) - Date.parse(b.date));
+    return <section className="compact-schedule" aria-labelledby="schedule-title">
+      <p className="compact-wordmark">AXION</p>
+      <h1 id="schedule-title">{t("Turnir jadvali")}</h1>
+      <p className="compact-reason">{t("Video va scroll sahnalari katta ekran uchun moslangan. Telefonda turnir jadvali ochiladi.")}</p>
+      {failure ? <div className="compact-message" role="alert">
+        <p>{t(failure)}</p><button className="button button-quiet" onClick={() => void refresh()}>{t("Qayta yuklash")}</button>
+      </div> : chronological.length ? <ul className="compact-events" aria-label={t("Turnir jadvali")}>
+        {chronological.map((item) => <li key={item.id}>
+          <h2>{item.title}</h2>
+          <time dateTime={item.date}>{dateLabel(item.date, locale)} · {time.format(new Date(item.date))} <span>UTC+5</span></time>
+          <p>{item.teams.length ? item.teams.map(({ name }) => name).join(" · ") : t("Jamoalar hali ro‘yxatdan o‘tmagan.")}</p>
+        </li>)}
+      </ul> : <p className="compact-message" role="status">{t(mode === "loading" ? "Turnirlar yuklanmoqda…" : "Turnirlar topilmadi.")}</p>}
+    </section>;
+  }
 
   return <section id={preview ? "turnirlar" : undefined} className={preview ? "tournaments-section" : "tournaments-section standalone"}>
     <div className="shell">
