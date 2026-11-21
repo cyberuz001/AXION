@@ -2,8 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { ArrowDownRight, ArrowUpRight, Pause, Play, RotateCcw } from "lucide-react";
-import { motion, useInView, useMotionValueEvent, useReducedMotion, useScroll, useTransform } from "motion/react";
+import { ArrowUpRight } from "lucide-react";
+import { motion, useInView, useMotionValueEvent, useReducedMotion, useScroll, useSpring, useTransform } from "motion/react";
 import BlurText from "./react-bits/BlurText";
 import ScrollReveal from "./react-bits/ScrollReveal";
 import DotGrid from "./react-bits/DotGrid";
@@ -44,8 +44,6 @@ const scenes = {
     detail: "O‘zbekiston kibersport turnirlari",
     action: "Turnirlarni ko‘rish",
     target: "/turnirlar",
-    next: "/cs2",
-    nextLabel: "CS2 videosi",
   },
   fighter: {
     name: "CS2",
@@ -54,8 +52,6 @@ const scenes = {
     detail: "Counter-Strike 2 turnirlari",
     action: "CS2 turnirlari",
     target: "/turnirlar?oyin=cs2",
-    next: "/#valorant",
-    nextLabel: "Keyingi arena",
   },
   valorant: {
     name: "VALORANT",
@@ -64,43 +60,47 @@ const scenes = {
     detail: "Jamoang bilan turnirga kir.",
     action: "VALORANT turnirlari",
     target: "/turnirlar?oyin=valorant",
-    next: "#turnirlar",
-    nextLabel: "Turnirlar taqvimi",
   },
 };
 
 export function ArenaScene({ game }: { game: Arena }) {
   const chapter = useRef<HTMLElement>(null);
   const video = useRef<HTMLVideoElement>(null);
-  const previewStart = useRef<number | null>(null);
   const lastSeek = useRef(0);
   const seekTimer = useRef<number | undefined>(undefined);
-  const [manual, setManual] = useState(false);
-  const [playing, setPlaying] = useState(false);
   const [source, setSource] = useState<string>();
+  const [introVisible, setIntroVisible] = useState(true);
   const scene = scenes[game];
   const { locale, t } = useLocale();
   const reducedMotion = useReducedMotion();
   const inView = useInView(chapter, { once: true, margin: "400px" });
-  const shouldLoad = game !== "valorant" || inView;
-  const { scrollY, scrollYProgress } = useScroll({
+  const shouldLoad = !reducedMotion && (game !== "valorant" || inView);
+  const { scrollYProgress } = useScroll({
     target: chapter,
     offset: ["start start", "end end"],
     trackContentSize: true,
   });
-  const filmTransform = useTransform(scrollYProgress, [0, 0.28, 0.74, 1], [
-    "translate3d(0, 0svh, 0) scale(1)",
-    "translate3d(0, -3svh, 0) scale(1.035)",
-    "translate3d(0, -10svh, 0) scale(1.09)",
-    "translate3d(0, -16svh, 0) scale(1.13)",
-  ]);
-  const copyTransform = useTransform(scrollYProgress, [0, 0.66], [
+  const stageTransform = useTransform(scrollYProgress, [0, 0.22, 0.62, 0.86, 1], [
     "translate3d(0, 0svh, 0)",
-    "translate3d(0, -11svh, 0)",
+    "translate3d(0, -13svh, 0)",
+    "translate3d(0, -33svh, 0)",
+    "translate3d(0, -47svh, 0)",
+    "translate3d(0, -102svh, 0)",
   ]);
-  const copyOpacity = useTransform(scrollYProgress, [0, 0.15, 0.64, 1], [1, 1, 0.38, 0.21]);
+  const filmTransform = useTransform(scrollYProgress, [0, 0.62, 0.86, 1], [
+    "translate3d(0, 0svh, 0) scale(1)",
+    "translate3d(0, 13svh, 0) scale(1.04)",
+    "translate3d(0, 23svh, 0) scale(1.09)",
+    "translate3d(0, 24svh, 0) scale(1.11)",
+  ]);
+  const copyTransform = useTransform(scrollYProgress, [0, 0.68], [
+    "translate3d(0, 0svh, 0)",
+    "translate3d(0, -29svh, 0)",
+  ]);
+  const copyOpacity = useTransform(scrollYProgress, [0, 0.1, 0.57, 0.73, 1], [1, 1, 0.28, 0, 0]);
   const lightTransform = useTransform(scrollYProgress, [0.68, 1], ["translateX(-56%)", "translateX(56%)"]);
   const lightOpacity = useTransform(scrollYProgress, [0.68, 0.84, 1], [0, 0.19, 0]);
+  const trackProgress = useSpring(scrollYProgress, { stiffness: 145, damping: 32, restDelta: 0.001 });
 
   useEffect(() => {
     if (!shouldLoad) return;
@@ -134,8 +134,7 @@ export function ArenaScene({ game }: { game: Arena }) {
 
   const syncFrame: () => void = useCallback(() => {
     const media = video.current;
-    if (reducedMotion || previewStart.current !== null || !media ||
-        media.readyState < HTMLMediaElement.HAVE_METADATA ||
+    if (reducedMotion || !media || media.readyState < HTMLMediaElement.HAVE_METADATA ||
         !Number.isFinite(media.duration) || media.duration <= 0) return;
 
     const time = scrollYProgress.get() * Math.max(0, media.duration - 0.045);
@@ -156,11 +155,10 @@ export function ArenaScene({ game }: { game: Arena }) {
     media.currentTime = time;
   }, [reducedMotion, scrollYProgress]);
 
-  useMotionValueEvent(scrollYProgress, "change", syncFrame);
-  useMotionValueEvent(scrollY, "change", (latest) => {
-    if (previewStart.current !== null && !reducedMotion && Math.abs(latest - previewStart.current) > 6) {
-      resumeScroll();
-    }
+  useMotionValueEvent(scrollYProgress, "change", (progress) => {
+    syncFrame();
+    const visible = progress < 0.7;
+    if (visible !== introVisible) setIntroVisible(visible);
   });
   useEffect(() => {
     syncFrame();
@@ -170,67 +168,41 @@ export function ArenaScene({ game }: { game: Arena }) {
     };
   }, [syncFrame]);
 
-  async function toggleVideo() {
-    const media = video.current;
-    if (!media) return;
-    if (!media.paused) {
-      media.pause();
-      return;
-    }
-    previewStart.current = scrollY.get();
-    setManual(true);
-    try {
-      await media.play();
-    } catch {
-      resumeScroll();
-    }
-  }
-
-  function resumeScroll() {
-    video.current?.pause();
-    previewStart.current = null;
-    setManual(false);
-    syncFrame();
-  }
-
   return <section className={`arena arena-${game}`} id={game} ref={chapter} aria-label={scene.name}>
-    <div className="arena-screen">
-      <motion.div className="arena-visual" style={reducedMotion ? undefined : { transform: filmTransform }}>
-        <video ref={video} src={source} poster={`/media/${game}.webp`}
-          preload={source ? "auto" : "none"} muted playsInline loop aria-hidden="true"
-          onLoadedMetadata={syncFrame} onLoadedData={syncFrame} onSeeked={syncFrame}
-          onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} />
-      </motion.div>
-      <div className="arena-gradients" />
-      <div className="arena-dots" aria-hidden="true">
-        <DotGrid dotSize={1.5} gap={34} baseColor={game === "valorant" ? "#999999" : "#777777"} activeColor={game === "valorant" ? "#3b3b3b" : "#eeeeee"} />
-      </div>
-      <motion.div className="arena-sheen" aria-hidden="true" style={reducedMotion ? undefined : { transform: lightTransform, opacity: lightOpacity }} />
-      <div className="shell arena-content">
-        <motion.div className="arena-copy" style={reducedMotion ? undefined : { transform: copyTransform, opacity: copyOpacity }}>
-          <div className="arena-game"><span aria-hidden="true" />{scene.name}</div>
-          {game !== "valorant" ? <h1 key={locale}><BlurText text={t(scene.title)} stepDuration={0.19} trigger="load" className="title-line" />
-            <BlurText text={t(scene.highlight)} stepDuration={0.22} trigger="load" className="title-line" /></h1> :
-            <h2><ScrollReveal containerClassName="reveal-heading" textClassName="title-line" baseOpacity={0.62} baseRotation={0} effect="rise">{t(scene.title)}</ScrollReveal>
-              <span className="title-line">{t(scene.highlight)}</span></h2>}
-          <p>{t(scene.detail)}</p>
-          <div className="arena-actions">
-            <StarBorder as={Link} href={scene.target} className="arena-cta" radius={2} stars={1} duration={10} glow={0.45}
-              hover="reveal" backgroundColor={game === "valorant" ? "#101010" : "#f7f7f7"}
-              textColor={game === "valorant" ? "#f7f7f7" : "#101010"}>
-              {t(scene.action)} <ArrowUpRight size={18} />
-            </StarBorder>
-          </div>
+    <div className="arena-window">
+      <motion.div className="arena-screen" style={reducedMotion ? undefined : { transform: stageTransform }}>
+        <motion.div className="arena-visual" style={reducedMotion ? undefined : { transform: filmTransform }}>
+          <video ref={video} src={source} poster={`/media/${game}.webp`}
+            preload={source ? "auto" : "none"} muted playsInline disablePictureInPicture disableRemotePlayback
+            aria-hidden="true" onLoadedMetadata={syncFrame} onLoadedData={syncFrame} onSeeked={syncFrame} />
         </motion.div>
-        <div className="arena-bottom">
-          <Link className="next-scene" href={scene.next}>{t(scene.nextLabel)} <ArrowDownRight size={17} /></Link>
-          <div className="scene-tracker" aria-hidden="true"><motion.span style={reducedMotion ? undefined : { scaleX: scrollYProgress }} /></div>
-          <div className="video-controls">
-            {manual && <button className="icon-button" type="button" aria-label={t("Scroll orqali boshqarish")} title={t("Scroll orqali boshqarish")} onClick={resumeScroll}><RotateCcw size={16} /></button>}
-            <button className="icon-button" type="button" disabled={!source} aria-label={t(playing ? "Videoni pauza qilish" : "Videoni ijro etish")} onClick={toggleVideo}>
-              {playing ? <Pause size={17} /> : <Play size={17} />}
-            </button>
-          </div>
+        <div className="arena-gradients" />
+        <div className="arena-dots" aria-hidden="true">
+          <DotGrid dotSize={1.5} gap={34} baseColor={game === "valorant" ? "#999999" : "#777777"} activeColor={game === "valorant" ? "#3b3b3b" : "#eeeeee"} />
+        </div>
+        <motion.div className="arena-sheen" aria-hidden="true" style={reducedMotion ? undefined : { transform: lightTransform, opacity: lightOpacity }} />
+        <div className="shell arena-content">
+          <motion.div className="arena-copy"
+            style={reducedMotion ? undefined : { transform: copyTransform, opacity: copyOpacity }}>
+            <div className="arena-game"><span aria-hidden="true" />{scene.name}</div>
+            {game !== "valorant" ? <h1 key={locale}><BlurText text={t(scene.title)} stepDuration={0.19} trigger="load" className="title-line" />
+              <BlurText text={t(scene.highlight)} stepDuration={0.22} trigger="load" className="title-line" /></h1> :
+              <h2><ScrollReveal containerClassName="reveal-heading" textClassName="title-line" baseOpacity={0.62} baseRotation={0} effect="rise">{t(scene.title)}</ScrollReveal>
+                <span className="title-line">{t(scene.highlight)}</span></h2>}
+            <p>{t(scene.detail)}</p>
+            <div className="arena-actions" inert={!reducedMotion && !introVisible}>
+              <StarBorder as={Link} href={scene.target} className="arena-cta" radius={2} stars={1} duration={10} glow={0.45}
+                hover="reveal" backgroundColor={game === "valorant" ? "#101010" : "#f7f7f7"}
+                textColor={game === "valorant" ? "#f7f7f7" : "#101010"}>
+                {t(scene.action)} <ArrowUpRight size={18} />
+              </StarBorder>
+            </div>
+          </motion.div>
+        </div>
+      </motion.div>
+      <div className="shell arena-progress" aria-hidden="true">
+        <div className="scene-tracker">
+          <motion.span style={reducedMotion ? undefined : { scaleX: trackProgress }} />
         </div>
       </div>
     </div>

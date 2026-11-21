@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { useMotionValueEvent, useScroll } from "motion/react";
 import { MobileNav } from "./mobile-nav";
 import { OptionSelect } from "./option-select";
 import { ThemeToggle } from "./theme";
@@ -20,27 +21,11 @@ export function Header() {
   const path = usePathname();
   const [hidden, setHidden] = useState(false);
 
-  useEffect(() => {
-    setHidden(false);
-    let lastY = Math.max(window.scrollY, 0);
-    let frame = 0;
-    function update() {
-      frame = 0;
-      const y = Math.max(window.scrollY, 0);
-      const delta = y - lastY;
-      if (y <= 70) setHidden(false);
-      else if (Math.abs(delta) >= 7) setHidden(delta > 0);
-      if (y <= 70 || Math.abs(delta) >= 7) lastY = y;
-    }
-    function onScroll() {
-      if (!frame) frame = requestAnimationFrame(update);
-    }
-    window.addEventListener("scroll", onScroll, { passive: true });
-    return () => {
-      window.removeEventListener("scroll", onScroll);
-      cancelAnimationFrame(frame);
-    };
-  }, [path]);
+  const { scrollY } = useScroll();
+  useMotionValueEvent(scrollY, "change", (y) => {
+    if (y <= 2) setHidden(false);
+    else if (y > 16 && y > (scrollY.getPrevious() ?? 0)) setHidden(true);
+  });
 
   const links = <>
     <Link href="/cs2" aria-current={path === "/cs2" ? "page" : undefined}>CS2</Link>
@@ -67,7 +52,7 @@ export function Footer() {
   return <footer className="site-footer">
     <div className="shell footer-inner">
       <Brand />
-      <nav aria-label={t("Sahifa oxiri")}><Link href="/turnirlar">{t("Turnirlar")}</Link><Link href="/boshqaruv">{t("Boshqaruv")}</Link><a href="https://github.com/cyberuz001/AXION">GitHub</a></nav>
+      <nav aria-label={t("Sahifa oxiri")}><Link href="/cs2">CS2</Link><Link href="/#valorant">VALORANT</Link><Link href="/turnirlar">{t("Turnirlar")}</Link><Link href="/boshqaruv">{t("Boshqaruv")}</Link><a href="https://github.com/cyberuz001/AXION">GitHub</a></nav>
     </div>
     <div className="shell footer-legal">
       <span>AXION © {new Date().getUTCFullYear()}</span>
