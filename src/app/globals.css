@@ -102,15 +102,14 @@ svg { flex: none; }
 .icon-button { display: grid; width: 44px; height: 44px; place-items: center; background: transparent; color: inherit; border: 1px solid currentColor; border-radius: 2px; transition: background 160ms; }
 .icon-button:hover:not(:disabled) { background: #89898926; }
 
-.arena { --arena-drift: 28svh; position: relative; padding-bottom: var(--arena-drift); background: #0a0a0a; }
-.arena-valorant { background: #dfdfdf; }
-.arena-screen { --scene-progress: 0; --scene-offset: 0px; --scene-direction: 1; --arena-line: #ffffff2e; position: relative; height: 100svh; min-height: 560px; isolation: isolate; overflow: clip; color: #f6f6f6; background: #0a0a0a; translate: 0 var(--scene-offset); }
-.arena-valorant .arena-screen { --scene-direction: -1; --arena-line: #16161631; color: #111; background: #dfdfdf; }
+.arena { --arena-runway: 150svh; position: relative; min-height: calc(100svh + var(--arena-runway)); background: #0a0a0a; }
+.arena-cs2 { --arena-runway: 200svh; }
+.arena-valorant { --arena-runway: 120svh; background: #dfdfdf; }
+.arena-screen { --arena-line: #ffffff2e; position: sticky; top: 0; height: 100svh; isolation: isolate; overflow: clip; color: #f6f6f6; background: #0a0a0a; }
+.arena-valorant .arena-screen { --arena-line: #16161631; color: #111; background: #dfdfdf; }
 .arena-visual { position: absolute; inset: 0 0 0 32%; z-index: -3; overflow: clip; }
 .arena-visual video {
   display: block; width: 100%; height: 100%; object-fit: cover; object-position: center; filter: grayscale(1);
-  transform: perspective(1100px) translateX(calc(-3.6% * var(--scene-direction) * var(--scene-progress)))
-    rotateY(calc(9deg * var(--scene-direction) * var(--scene-progress))) scale(calc(1.025 + var(--scene-progress) * 0.12));
 }
 .arena-cs2 .arena-visual { inset-inline-start: 0; }
 .arena-cs2 .arena-visual video { object-position: center 42%; }
@@ -122,12 +121,11 @@ svg { flex: none; }
 }
 .arena-valorant .arena-gradients { background: linear-gradient(90deg, #dfdfdf 25%, #dfdfdff7 32%, #dfdfdf77 50%, transparent 65%), linear-gradient(0deg, #dfdfdf 0%, transparent 23%); }
 .arena-dots { position: absolute; z-index: -1; inset: 0; opacity: 0.46; mask-image: linear-gradient(90deg, #000, transparent 58%); pointer-events: none; }
-.arena-sheen { position: absolute; z-index: 1; inset: 0 -35%; pointer-events: none; opacity: calc(max(0, (var(--scene-progress) - 0.62)) * 0.72); background: linear-gradient(108deg, transparent 43%, #ffffff42 49%, #ffffffa1 50%, #ffffff14 51%, transparent 57%); transform: translateX(calc((var(--scene-progress) - 0.7) * 160%)); }
-.arena-valorant .arena-sheen { opacity: calc(max(0, (var(--scene-progress) - 0.62)) * 0.56); }
+.arena-sheen { position: absolute; z-index: 1; inset: 0 -35%; pointer-events: none; opacity: 0; background: linear-gradient(108deg, transparent 43%, #ffffff42 49%, #ffffffa1 50%, #ffffff14 51%, transparent 57%); }
 .arena-content { position: relative; height: 100%; display: flex; align-items: center; padding-block: var(--header) 61px; border-inline: 1px solid var(--arena-line); }
 .arena-content::before { content: ""; position: absolute; top: 53%; left: 0; width: 100%; border-top: 1px solid var(--arena-line); z-index: -1; opacity: 0.46; }
-.arena-copy { z-index: 2; padding-inline: clamp(23px, 4vw, 68px) 0; opacity: calc(1 - 0.8 * var(--scene-progress)); translate: 0 calc(-34px * var(--scene-progress)); }
-.arena-copy:focus-within, .arena-copy:hover { opacity: 1; }
+.arena-copy { z-index: 2; padding-inline: clamp(23px, 4vw, 68px) 0; }
+.arena-copy:focus-within { opacity: 1 !important; }
 .arena-game { display: flex; align-items: center; gap: 9px; margin-bottom: 22px; font-size: 0.95rem; font-weight: 760; letter-spacing: 0.065em; }
 .arena-game span { width: 16px; height: 1px; background: currentColor; }
 .arena-copy h1, .arena-copy h2 { margin: 0 0 20px -0.06em; font: 900 clamp(4.4rem, 9vw, 9.3rem)/0.91 var(--display); letter-spacing: -0.073em; }
@@ -143,7 +141,7 @@ svg { flex: none; }
 .next-scene svg { transition: transform 170ms; }
 .next-scene:hover svg { transform: translate(2px, 2px); }
 .scene-tracker { overflow: hidden; height: 1px; background: var(--arena-line); }
-.scene-tracker span { display: block; height: 100%; background: currentColor; transform-origin: left; transform: scaleX(var(--scene-progress)); }
+.scene-tracker span { display: block; height: 100%; background: currentColor; transform-origin: left; }
 .video-controls { display: flex; gap: 4px; }
 .video-controls .icon-button { border-color: var(--arena-line); }
 
@@ -260,8 +258,9 @@ input::placeholder { color: var(--muted); }
   .mobile-nav nav { position: absolute; right: 0; top: calc(100% + 9px); min-width: 166px; background: var(--panel); border: 1px solid var(--ink); padding: 4px; animation: option-in 150ms ease-out; }
   .mobile-nav nav a { display: flex; align-items: center; min-height: 44px; padding: 6px 10px; font-weight: 710; }
   .mobile-nav nav a:hover { background: var(--wash); }
-  .arena { --arena-drift: 34svh; }
-  .arena-screen { min-height: min(670px, 100svh); }
+  .arena { --arena-runway: 115svh; }
+  .arena-cs2 { --arena-runway: 160svh; }
+  .arena-valorant { --arena-runway: 100svh; }
   .arena-visual { inset: 0 0 18% 0; }
   .arena-visual video { object-position: center 62%; }
   .arena-cs2 .arena-visual { inset: clamp(85px, 18svh, 172px) 0 auto; aspect-ratio: 16 / 9; mask-image: linear-gradient(0deg, transparent 0%, #000 14%, #000 90%, transparent 100%); }
@@ -292,15 +291,17 @@ input::placeholder { color: var(--muted); }
 }
 
 @media (max-height: 530px) and (orientation: landscape) {
-  .arena-screen { min-height: 530px; }
+  .arena-content, .arena-cs2 .arena-content { align-items: center; padding-block: var(--header) 54px; }
+  .arena-copy h1, .arena-copy h2 { font-size: clamp(2.35rem, 10svh, 3.65rem); margin-bottom: 12px; }
+  .arena-game { margin-bottom: 10px; }
+  .arena-actions { margin-top: 12px; }
+  .arena-bottom { padding-block: 6px; }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
-  .arena { padding-bottom: 0; }
-  .arena-screen, .arena-copy { translate: none; }
-  .arena-copy { opacity: 1; }
-  .arena-dots, .arena-sheen { display: none; }
-  .arena-visual video { transform: none; }
+  .arena { min-height: 100svh; }
+  .arena-screen { position: relative; }
+  .arena-dots, .arena-sheen, .scene-tracker { visibility: hidden; }
   .route-enter::after { display: none; }
   .title-line span { opacity: 1 !important; transform: none !important; filter: none !important; }
 }

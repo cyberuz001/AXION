@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { ArrowDownRight, ArrowUpRight, Pause, Play, RotateCcw } from "lucide-react";
+import { motion, useInView, useMotionValueEvent, useReducedMotion, useScroll, useTransform } from "motion/react";
 import BlurText from "./react-bits/BlurText";
 import ScrollReveal from "./react-bits/ScrollReveal";
 import DotGrid from "./react-bits/DotGrid";
@@ -10,13 +11,6 @@ import StarBorder from "./react-bits/StarBorder";
 import { useLocale } from "./locale";
 
 type Arena = "cs2" | "fighter" | "valorant";
-const scrubDistance = 0.54;
-
-function sceneDrift(progress: number) {
-  // Let the film pick up the page's full scroll speed as the clip finishes.
-  const tail = Math.max(0, progress - 0.75);
-  return (8 / 7) * (progress - 2 * tail * tail);
-}
 
 const scenes = {
   cs2: {
@@ -54,15 +48,35 @@ const scenes = {
 export function ArenaScene({ game }: { game: Arena }) {
   const chapter = useRef<HTMLElement>(null);
   const video = useRef<HTMLVideoElement>(null);
-  const screen = useRef<HTMLDivElement>(null);
-  const syncScroll = useRef<(() => void) | null>(null);
   const previewStart = useRef<number | null>(null);
+  const lastSeek = useRef(0);
+  const seekTimer = useRef<number | undefined>(undefined);
   const [manual, setManual] = useState(false);
   const [playing, setPlaying] = useState(false);
-  const [shouldLoad, setShouldLoad] = useState(game !== "valorant");
   const [source, setSource] = useState<string>();
   const scene = scenes[game];
   const { locale, t } = useLocale();
+  const reducedMotion = useReducedMotion();
+  const inView = useInView(chapter, { once: true, margin: "400px" });
+  const shouldLoad = game !== "valorant" || inView;
+  const { scrollY, scrollYProgress } = useScroll({
+    target: chapter,
+    offset: ["start start", "end end"],
+    trackContentSize: true,
+  });
+  const filmTransform = useTransform(scrollYProgress, [0, 0.28, 0.74, 1], [
+    "translate3d(0, 0svh, 0) scale(1)",
+    "translate3d(0, -3svh, 0) scale(1.035)",
+    "translate3d(0, -10svh, 0) scale(1.09)",
+    "translate3d(0, -16svh, 0) scale(1.13)",
+  ]);
+  const copyTransform = useTransform(scrollYProgress, [0, 0.66], [
+    "translate3d(0, 0svh, 0)",
+    "translate3d(0, -11svh, 0)",
+  ]);
+  const copyOpacity = useTransform(scrollYProgress, [0, 0.15, 0.64, 1], [1, 1, 0.38, 0.21]);
+  const lightTransform = useTransform(scrollYProgress, [0.68, 1], ["translateX(-56%)", "translateX(56%)"]);
+  const lightOpacity = useTransform(scrollYProgress, [0.68, 0.84, 1], [0, 0.19, 0]);
 
   useEffect(() => {
     if (!shouldLoad) return;
@@ -73,7 +87,7 @@ export function ArenaScene({ game }: { game: Arena }) {
 
     const path = `/media/${game}-mobile.mp4`;
     const request = new AbortController();
-    const timeout = window.setTimeout(() => request.abort(), 18000);
+    const timeout = window.setTimeout(() => request.abort(), 30000);
     let disposed = false;
     let objectUrl: string | undefined;
     // Buffer the small mobile clip once so rapid scroll does not interrupt range downloads.
@@ -94,104 +108,43 @@ export function ArenaScene({ game }: { game: Arena }) {
     };
   }, [game, shouldLoad]);
 
-  useEffect(() => {
-    const section = chapter.current;
-    const stage = screen.current;
+  const syncFrame: () => void = useCallback(() => {
     const media = video.current;
-    if (!section || !stage || !media) return;
+    if (reducedMotion || previewStart.current !== null || !media ||
+        media.readyState < HTMLMediaElement.HAVE_METADATA ||
+        !Number.isFinite(media.duration) || media.duration <= 0) return;
 
-    const motionPreference = window.matchMedia("(prefers-reduced-motion: reduce)");
-    let frame = 0;
-    let seekTimer = 0;
-    let lastSeek = 0;
-    let travel = 0;
-    let driftLimit = 0;
+    const time = scrollYProgress.get() * Math.max(0, media.duration - 0.045);
+    if (Math.abs(media.currentTime - time) < 0.016) return;
 
-    const render = () => {
-      frame = 0;
-      if (motionPreference.matches || travel <= 0) return;
-
-      const progress = Math.min(1, Math.max(0, -section.getBoundingClientRect().top / travel));
-      stage.style.setProperty("--scene-progress", String(progress));
-      stage.style.setProperty("--scene-offset", `${driftLimit * sceneDrift(progress)}px`);
-      if (previewStart.current !== null) return;
-      if (media.readyState < HTMLMediaElement.HAVE_METADATA ||
-          !Number.isFinite(media.duration) || media.duration <= 0) return;
-
-      const end = Math.max(0, media.duration - 0.045);
-      const time = progress * end;
-      if (Math.abs(media.currentTime - time) < 0.016) return;
-
-      const now = performance.now();
-      const wait = 85 - (now - lastSeek);
-      if (media.seeking && wait > 0) {
-        if (!seekTimer) {
-          seekTimer = window.setTimeout(() => {
-            seekTimer = 0;
-            schedule();
-          }, wait);
-        }
-        return;
+    const now = performance.now();
+    const wait = 85 - (now - lastSeek.current);
+    if (media.seeking && wait > 0) {
+      if (seekTimer.current === undefined) {
+        seekTimer.current = window.setTimeout(() => {
+          seekTimer.current = undefined;
+          syncFrame();
+        }, wait);
       }
-      lastSeek = now;
-      media.currentTime = time;
-    };
-
-    function schedule() {
-      if (!frame) frame = requestAnimationFrame(render);
+      return;
     }
+    lastSeek.current = now;
+    media.currentTime = time;
+  }, [reducedMotion, scrollYProgress]);
 
-    const measure = () => {
-      const sectionStart = section.getBoundingClientRect().top + window.scrollY;
-      const scrollEnd = document.documentElement.scrollHeight - window.innerHeight;
-      travel = Math.max(0, Math.min(stage.offsetHeight * scrubDistance, scrollEnd - sectionStart));
-      const padding = Number.parseFloat(getComputedStyle(section).paddingBottom) || 0;
-      driftLimit = Math.min(padding, travel * 0.66);
-      schedule();
-    };
-
-    const onScroll = () => {
-      if (previewStart.current !== null && !motionPreference.matches &&
-          Math.abs(window.scrollY - previewStart.current) > 6) {
-        previewStart.current = null;
-        media.pause();
-        setManual(false);
-      }
-      schedule();
-    };
-
-    syncScroll.current = schedule;
-    const sizes = new ResizeObserver(measure);
-    sizes.observe(section);
-    sizes.observe(stage);
-    sizes.observe(document.body);
-    const observer = new IntersectionObserver(([entry]) => {
-      if (entry.isIntersecting) {
-        setShouldLoad(true);
-        observer.disconnect();
-      }
-    }, { rootMargin: "400px" });
-    observer.observe(section);
-    window.addEventListener("scroll", onScroll, { passive: true });
-    window.addEventListener("resize", measure);
-    window.addEventListener("pageshow", measure);
-    motionPreference.addEventListener("change", measure);
-    const resyncEvents = ["loadedmetadata", "loadeddata", "durationchange", "seeked"];
-    resyncEvents.forEach((event) => media.addEventListener(event, schedule));
-    measure();
+  useMotionValueEvent(scrollYProgress, "change", syncFrame);
+  useMotionValueEvent(scrollY, "change", (latest) => {
+    if (previewStart.current !== null && !reducedMotion && Math.abs(latest - previewStart.current) > 6) {
+      resumeScroll();
+    }
+  });
+  useEffect(() => {
+    syncFrame();
     return () => {
-      observer.disconnect();
-      sizes.disconnect();
-      window.removeEventListener("scroll", onScroll);
-      window.removeEventListener("resize", measure);
-      window.removeEventListener("pageshow", measure);
-      motionPreference.removeEventListener("change", measure);
-      resyncEvents.forEach((event) => media.removeEventListener(event, schedule));
-      cancelAnimationFrame(frame);
-      window.clearTimeout(seekTimer);
-      syncScroll.current = null;
+      window.clearTimeout(seekTimer.current);
+      seekTimer.current = undefined;
     };
-  }, []);
+  }, [syncFrame]);
 
   async function toggleVideo() {
     const media = video.current;
@@ -200,7 +153,7 @@ export function ArenaScene({ game }: { game: Arena }) {
       media.pause();
       return;
     }
-    previewStart.current = window.scrollY;
+    previewStart.current = scrollY.get();
     setManual(true);
     try {
       await media.play();
@@ -213,23 +166,24 @@ export function ArenaScene({ game }: { game: Arena }) {
     video.current?.pause();
     previewStart.current = null;
     setManual(false);
-    syncScroll.current?.();
+    syncFrame();
   }
 
   return <section className={`arena arena-${game}`} id={game} ref={chapter} aria-label={scene.name}>
-    <div className="arena-screen" ref={screen}>
-      <div className="arena-visual">
+    <div className="arena-screen">
+      <motion.div className="arena-visual" style={reducedMotion ? undefined : { transform: filmTransform }}>
         <video ref={video} src={source} poster={`/media/${game}.webp`}
           preload={source ? "auto" : "none"} muted playsInline loop aria-hidden="true"
+          onLoadedMetadata={syncFrame} onLoadedData={syncFrame} onSeeked={syncFrame}
           onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} />
-      </div>
+      </motion.div>
       <div className="arena-gradients" />
       <div className="arena-dots" aria-hidden="true">
         <DotGrid dotSize={1.5} gap={34} baseColor={game === "valorant" ? "#999999" : "#777777"} activeColor={game === "valorant" ? "#3b3b3b" : "#eeeeee"} />
       </div>
-      <div className="arena-sheen" aria-hidden="true" />
+      <motion.div className="arena-sheen" aria-hidden="true" style={reducedMotion ? undefined : { transform: lightTransform, opacity: lightOpacity }} />
       <div className="shell arena-content">
-        <div className="arena-copy">
+        <motion.div className="arena-copy" style={reducedMotion ? undefined : { transform: copyTransform, opacity: copyOpacity }}>
           <div className="arena-game"><span aria-hidden="true" />{scene.name}</div>
           {game !== "valorant" ? <h1 key={locale}><BlurText text={t(scene.title)} stepDuration={0.19} trigger="load" className="title-line" />
             <BlurText text={t(scene.highlight)} stepDuration={0.22} trigger="load" className="title-line" /></h1> :
@@ -243,10 +197,10 @@ export function ArenaScene({ game }: { game: Arena }) {
               {t(scene.action)} <ArrowUpRight size={18} />
             </StarBorder>
           </div>
-        </div>
+        </motion.div>
         <div className="arena-bottom">
           <Link className="next-scene" href={scene.next}>{t(scene.nextLabel)} <ArrowDownRight size={17} /></Link>
-          <div className="scene-tracker" aria-hidden="true"><span /></div>
+          <div className="scene-tracker" aria-hidden="true"><motion.span style={reducedMotion ? undefined : { scaleX: scrollYProgress }} /></div>
           <div className="video-controls">
             {manual && <button className="icon-button" type="button" aria-label={t("Scroll orqali boshqarish")} title={t("Scroll orqali boshqarish")} onClick={resumeScroll}><RotateCcw size={16} /></button>}
             <button className="icon-button" type="button" disabled={!source} aria-label={t(playing ? "Videoni pauza qilish" : "Videoni ijro etish")} onClick={toggleVideo}>
