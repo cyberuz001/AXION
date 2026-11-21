@@ -73,18 +73,22 @@ export function ArenaScene({ game }: { game: Arena }) {
 
     const path = `/media/${game}-mobile.mp4`;
     const request = new AbortController();
+    const timeout = window.setTimeout(() => request.abort(), 18000);
+    let disposed = false;
     let objectUrl: string | undefined;
     // Buffer the small mobile clip once so rapid scroll does not interrupt range downloads.
     void fetch(path, { signal: request.signal }).then(async (response) => {
       if (!response.ok) throw new Error("Could not buffer the clip");
       const movie = await response.blob();
-      if (request.signal.aborted) return;
+      if (disposed) return;
       objectUrl = URL.createObjectURL(movie);
       setSource(objectUrl);
     }).catch(() => {
-      if (!request.signal.aborted) setSource(path);
-    });
+      if (!disposed) setSource(path);
+    }).finally(() => window.clearTimeout(timeout));
     return () => {
+      disposed = true;
+      window.clearTimeout(timeout);
       request.abort();
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
@@ -213,8 +217,6 @@ export function ArenaScene({ game }: { game: Arena }) {
   }
 
   return <section className={`arena arena-${game}`} id={game} ref={chapter} aria-label={scene.name}>
-    {game !== "valorant" && <link rel="preload" as="fetch" href={`/media/${game}-mobile.mp4`}
-      media="(max-width: 720px)" crossOrigin="anonymous" />}
     <div className="arena-screen" ref={screen}>
       <div className="arena-visual">
         <video ref={video} src={source} poster={`/media/${game}.webp`}
