@@ -11,6 +11,30 @@ import StarBorder from "./react-bits/StarBorder";
 import { useLocale } from "./locale";
 
 type Arena = "cs2" | "fighter" | "valorant";
+const mediaChunkSize = 768 * 1024;
+
+async function bufferFilm(path: string, signal: AbortSignal, segmented: boolean) {
+  const first = await fetch(path, { signal, headers: segmented ? { Range: `bytes=0-${mediaChunkSize - 1}` } : undefined });
+  if (!first.ok) throw new Error("Could not buffer the clip");
+  if (!segmented || first.status === 200) return first.blob();
+
+  const range = /^bytes 0-(\d+)\/(\d+)$/.exec(first.headers.get("Content-Range") ?? "");
+  if (!range) throw new Error("Missing clip byte range");
+
+  const start = Number(range[1]) + 1;
+  const length = Number(range[2]);
+  const chunks = Array.from({ length: Math.ceil((length - start) / mediaChunkSize) }, (_, index) => {
+    const from = start + index * mediaChunkSize;
+    const to = Math.min(from + mediaChunkSize, length) - 1;
+    return fetch(path, { signal, headers: { Range: `bytes=${from}-${to}` } }).then((response) => {
+      if (response.headers.get("Content-Range") !== `bytes ${from}-${to}/${length}` || response.status !== 206) {
+        throw new Error("Unexpected clip byte range");
+      }
+      return response.arrayBuffer();
+    });
+  });
+  return new Blob(await Promise.all([first.arrayBuffer(), ...chunks]), { type: "video/mp4" });
+}
 
 const scenes = {
   cs2: {
@@ -80,24 +104,24 @@ export function ArenaScene({ game }: { game: Arena }) {
 
   useEffect(() => {
     if (!shouldLoad) return;
-    if (!window.matchMedia("(max-width: 720px)").matches) {
-      setSource(`/media/${game}.mp4`);
+    const mobile = window.matchMedia("(max-width: 720px)").matches;
+    const path = `/media/${game}${mobile ? "-mobile" : ""}.mp4`;
+    if (!mobile && game !== "cs2") {
+      setSource(path);
       return;
     }
 
-    const path = `/media/${game}-mobile.mp4`;
     const request = new AbortController();
-    const timeout = window.setTimeout(() => request.abort(), 30000);
+    const timeout = window.setTimeout(() => request.abort(), 38000);
     let disposed = false;
     let objectUrl: string | undefined;
-    // Buffer the small mobile clip once so rapid scroll does not interrupt range downloads.
-    void fetch(path, { signal: request.signal }).then(async (response) => {
-      if (!response.ok) throw new Error("Could not buffer the clip");
-      const movie = await response.blob();
+    // Buffer the scroll clip so reversing direction does not interrupt an outstanding media request.
+    void bufferFilm(path, request.signal, !mobile).then((movie) => {
       if (disposed) return;
       objectUrl = URL.createObjectURL(movie);
       setSource(objectUrl);
     }).catch(() => {
+      request.abort();
       if (!disposed) setSource(path);
     }).finally(() => window.clearTimeout(timeout));
     return () => {
