@@ -102,9 +102,9 @@ svg { flex: none; }
 .icon-button { display: grid; width: 44px; height: 44px; place-items: center; background: transparent; color: inherit; border: 1px solid currentColor; border-radius: 2px; transition: background 160ms; }
 .icon-button:hover:not(:disabled) { background: #89898926; }
 
-.arena { position: relative; min-height: 186svh; background: #0a0a0a; }
+.arena { --arena-drift: 28svh; position: relative; padding-bottom: var(--arena-drift); background: #0a0a0a; }
 .arena-valorant { background: #dfdfdf; }
-.arena-screen { --scene-progress: 0; --scene-direction: 1; --arena-line: #ffffff2e; position: sticky; top: 0; height: 100svh; min-height: 560px; isolation: isolate; overflow: clip; color: #f6f6f6; background: #0a0a0a; }
+.arena-screen { --scene-progress: 0; --scene-offset: 0px; --scene-direction: 1; --arena-line: #ffffff2e; position: relative; height: 100svh; min-height: 560px; isolation: isolate; overflow: clip; color: #f6f6f6; background: #0a0a0a; translate: 0 var(--scene-offset); }
 .arena-valorant .arena-screen { --scene-direction: -1; --arena-line: #16161631; color: #111; background: #dfdfdf; }
 .arena-visual { position: absolute; inset: 0 0 0 32%; z-index: -3; overflow: clip; }
 .arena-visual video {
@@ -126,7 +126,8 @@ svg { flex: none; }
 .arena-valorant .arena-sheen { opacity: calc(max(0, (var(--scene-progress) - 0.62)) * 0.56); }
 .arena-content { position: relative; height: 100%; display: flex; align-items: center; padding-block: var(--header) 61px; border-inline: 1px solid var(--arena-line); }
 .arena-content::before { content: ""; position: absolute; top: 53%; left: 0; width: 100%; border-top: 1px solid var(--arena-line); z-index: -1; opacity: 0.46; }
-.arena-copy { z-index: 2; padding-inline: clamp(23px, 4vw, 68px) 0; }
+.arena-copy { z-index: 2; padding-inline: clamp(23px, 4vw, 68px) 0; opacity: calc(1 - 0.8 * var(--scene-progress)); translate: 0 calc(-34px * var(--scene-progress)); }
+.arena-copy:focus-within, .arena-copy:hover { opacity: 1; }
 .arena-game { display: flex; align-items: center; gap: 9px; margin-bottom: 22px; font-size: 0.95rem; font-weight: 760; letter-spacing: 0.065em; }
 .arena-game span { width: 16px; height: 1px; background: currentColor; }
 .arena-copy h1, .arena-copy h2 { margin: 0 0 20px -0.06em; font: 900 clamp(4.4rem, 9vw, 9.3rem)/0.91 var(--display); letter-spacing: -0.073em; }
@@ -259,7 +260,7 @@ input::placeholder { color: var(--muted); }
   .mobile-nav nav { position: absolute; right: 0; top: calc(100% + 9px); min-width: 166px; background: var(--panel); border: 1px solid var(--ink); padding: 4px; animation: option-in 150ms ease-out; }
   .mobile-nav nav a { display: flex; align-items: center; min-height: 44px; padding: 6px 10px; font-weight: 710; }
   .mobile-nav nav a:hover { background: var(--wash); }
-  .arena { min-height: 167svh; }
+  .arena { --arena-drift: 34svh; }
   .arena-screen { min-height: min(670px, 100svh); }
   .arena-visual { inset: 0 0 18% 0; }
   .arena-visual video { object-position: center 62%; }
@@ -291,13 +292,13 @@ input::placeholder { color: var(--muted); }
 }
 
 @media (max-height: 530px) and (orientation: landscape) {
-  .arena { min-height: 740px; }
   .arena-screen { min-height: 530px; }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
-  .arena { min-height: 0; }
-  .arena-screen { position: relative; top: auto; }
+  .arena { padding-bottom: 0; }
+  .arena-screen, .arena-copy { translate: none; }
+  .arena-copy { opacity: 1; }
   .arena-dots, .arena-sheen { display: none; }
   .arena-visual video { transform: none; }
   .route-enter::after { display: none; }

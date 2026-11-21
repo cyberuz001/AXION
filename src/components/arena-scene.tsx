@@ -10,6 +10,13 @@ import StarBorder from "./react-bits/StarBorder";
 import { useLocale } from "./locale";
 
 type Arena = "cs2" | "fighter" | "valorant";
+const scrubDistance = 0.54;
+
+function sceneDrift(progress: number) {
+  // Let the film pick up the page's full scroll speed as the clip finishes.
+  const tail = Math.max(0, progress - 0.75);
+  return (8 / 7) * (progress - 2 * tail * tail);
+}
 
 const scenes = {
   cs2: {
@@ -64,15 +71,17 @@ export function ArenaScene({ game }: { game: Arena }) {
 
     const motionPreference = window.matchMedia("(prefers-reduced-motion: reduce)");
     let frame = 0;
-    let stickyTop = 0;
     let travel = 0;
+    let driftLimit = 0;
 
     const render = () => {
       frame = 0;
-      if (motionPreference.matches || previewStart.current !== null || travel <= 0) return;
+      if (motionPreference.matches || travel <= 0) return;
 
-      const progress = Math.min(1, Math.max(0, (stickyTop - section.getBoundingClientRect().top) / travel));
+      const progress = Math.min(1, Math.max(0, -section.getBoundingClientRect().top / travel));
       stage.style.setProperty("--scene-progress", String(progress));
+      stage.style.setProperty("--scene-offset", `${driftLimit * sceneDrift(progress)}px`);
+      if (previewStart.current !== null) return;
       if (media.seeking || media.readyState < HTMLMediaElement.HAVE_METADATA ||
           !Number.isFinite(media.duration) || media.duration <= 0) return;
 
@@ -86,8 +95,11 @@ export function ArenaScene({ game }: { game: Arena }) {
     }
 
     const measure = () => {
-      stickyTop = Number.parseFloat(getComputedStyle(stage).top) || 0;
-      travel = section.offsetHeight - stage.offsetHeight;
+      const sectionStart = section.getBoundingClientRect().top + window.scrollY;
+      const scrollEnd = document.documentElement.scrollHeight - window.innerHeight;
+      travel = Math.max(0, Math.min(stage.offsetHeight * scrubDistance, scrollEnd - sectionStart));
+      const padding = Number.parseFloat(getComputedStyle(section).paddingBottom) || 0;
+      driftLimit = Math.min(padding, travel * 0.66);
       schedule();
     };
 
@@ -105,6 +117,7 @@ export function ArenaScene({ game }: { game: Arena }) {
     const sizes = new ResizeObserver(measure);
     sizes.observe(section);
     sizes.observe(stage);
+    sizes.observe(document.body);
     const observer = new IntersectionObserver(([entry]) => {
       if (entry.isIntersecting) {
         setShouldLoad(true);
