@@ -71,6 +71,8 @@ export function ArenaScene({ game }: { game: Arena }) {
 
     const motionPreference = window.matchMedia("(prefers-reduced-motion: reduce)");
     let frame = 0;
+    let seekTimer = 0;
+    let lastSeek = 0;
     let travel = 0;
     let driftLimit = 0;
 
@@ -82,12 +84,26 @@ export function ArenaScene({ game }: { game: Arena }) {
       stage.style.setProperty("--scene-progress", String(progress));
       stage.style.setProperty("--scene-offset", `${driftLimit * sceneDrift(progress)}px`);
       if (previewStart.current !== null) return;
-      if (media.seeking || media.readyState < HTMLMediaElement.HAVE_METADATA ||
+      if (media.readyState < HTMLMediaElement.HAVE_METADATA ||
           !Number.isFinite(media.duration) || media.duration <= 0) return;
 
       const end = Math.max(0, media.duration - 0.045);
       const time = progress * end;
-      if (Math.abs(media.currentTime - time) >= 0.016) media.currentTime = time;
+      if (Math.abs(media.currentTime - time) < 0.016) return;
+
+      const now = performance.now();
+      const wait = 85 - (now - lastSeek);
+      if (media.seeking && wait > 0) {
+        if (!seekTimer) {
+          seekTimer = window.setTimeout(() => {
+            seekTimer = 0;
+            schedule();
+          }, wait);
+        }
+        return;
+      }
+      lastSeek = now;
+      media.currentTime = time;
     };
 
     function schedule() {
@@ -141,6 +157,7 @@ export function ArenaScene({ game }: { game: Arena }) {
       motionPreference.removeEventListener("change", measure);
       resyncEvents.forEach((event) => media.removeEventListener(event, schedule));
       cancelAnimationFrame(frame);
+      window.clearTimeout(seekTimer);
       syncScroll.current = null;
     };
   }, []);
