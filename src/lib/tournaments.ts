@@ -29,8 +29,12 @@ export interface Tournament {
   matches: Match[];
 }
 
+type TournamentFields = Pick<Tournament, "title" | "game" | "date" | "slots" | "prize">;
+
 export type Command =
-  | { kind: "create"; title: string; game: Game; date: string; slots: number; prize: number }
+  | ({ kind: "create" } & TournamentFields)
+  | ({ kind: "edit"; id: string } & TournamentFields)
+  | { kind: "delete"; id: string; title: string }
   | { kind: "join"; id: string; name: string; captain: string }
   | { kind: "start"; id: string }
   | { kind: "score"; id: string; match: string; a: number; b: number };
@@ -57,23 +61,42 @@ export function prizeLabel(prize: number, locale: "uz" | "en" = "uz") {
 
 export class TournamentError extends Error {}
 
+function normalizeFields({ title, game, date, slots, prize }: TournamentFields): TournamentFields {
+  const name = title.trim();
+  const start = new Date(date);
+  if (name.length < 3 || name.length > 64 || !Object.hasOwn(games, game) ||
+      !Number.isFinite(start.getTime()) || !capacities.includes(slots) ||
+      !Number.isInteger(prize) || prize < 0 || prize > 1_000_000_000) {
+    throw new TournamentError("Turnir ma’lumotlarini tekshiring.");
+  }
+  return { title: name, game, date: start.toISOString(), slots, prize };
+}
+
 export function applyCommand(items: Tournament[], command: Command, id: string): Tournament[] {
   if (command.kind === "create") {
-    const title = command.title.trim();
-    const date = new Date(command.date);
-    if (title.length < 3 || title.length > 64 || !Object.hasOwn(games, command.game) ||
-        !Number.isFinite(date.getTime()) || !capacities.includes(command.slots) ||
-        !Number.isInteger(command.prize) || command.prize < 0 || command.prize > 1_000_000_000) {
-      throw new TournamentError("Turnir ma’lumotlarini tekshiring.");
-    }
+    const fields = normalizeFields(command);
     if (items.length >= 100) throw new TournamentError("Turnirlar soni chegaraga yetdi.");
-    return [{ id, title, game: command.game, date: date.toISOString(), slots: command.slots, prize: command.prize,
-      status: "open", teams: [], matches: [] }, ...items];
+    return [{ id, ...fields, status: "open", teams: [], matches: [] }, ...items];
   }
 
   const current = items.find((tournament) => tournament.id === command.id);
   if (!current) throw new TournamentError("Turnir topilmadi.");
+  if (command.kind === "delete") {
+    if (command.title !== current.title) throw new TournamentError("Turnir nomi o‘zgargan. Oynani qayta oching.");
+    return items.filter((tournament) => tournament.id !== current.id);
+  }
+
   const changed = { ...current };
+  if (command.kind === "edit") {
+    const fields = normalizeFields(command);
+    if (fields.game !== current.game && (current.teams.length || current.status !== "open")) {
+      throw new TournamentError("Jamoalar ro‘yxatdan o‘tgach o‘yinni o‘zgartirib bo‘lmaydi.");
+    }
+    if (fields.slots < current.teams.length || (current.status !== "open" && fields.slots !== current.slots)) {
+      throw new TournamentError("Jamoalar soniga va turnir holatiga mos joy tanlang.");
+    }
+    Object.assign(changed, fields);
+  }
 
   if (command.kind === "join") {
     const name = command.name.trim().replace(/\s+/g, " ");
@@ -174,11 +197,15 @@ export function demoTournaments(): Tournament[] {
 export function readCommand(input: unknown): Command {
   if (!input || typeof input !== "object" || !("kind" in input)) throw new TournamentError("So‘rov noto‘g‘ri.");
   const data = input as Record<string, unknown>;
-  if (data.kind === "create" && typeof data.title === "string" && (data.game === "cs2" || data.game === "valorant") &&
+  if ((data.kind === "create" || data.kind === "edit") && typeof data.title === "string" &&
+      (data.game === "cs2" || data.game === "valorant") &&
       typeof data.date === "string" && typeof data.slots === "number" && typeof data.prize === "number") {
-    return { kind: data.kind, title: data.title, game: data.game, date: data.date, slots: data.slots, prize: data.prize };
+    const fields: TournamentFields = { title: data.title, game: data.game, date: data.date, slots: data.slots, prize: data.prize };
+    if (data.kind === "create") return { kind: "create", ...fields };
+    if (typeof data.id === "string") return { kind: "edit", id: data.id, ...fields };
   }
   if (typeof data.id === "string") {
+    if (data.kind === "delete" && typeof data.title === "string") return { kind: "delete", id: data.id, title: data.title };
     if (data.kind === "join" && typeof data.name === "string" && typeof data.captain === "string") {
       return { kind: data.kind, id: data.id, name: data.name, captain: data.captain };
     }

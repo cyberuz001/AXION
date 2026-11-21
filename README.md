@@ -1,6 +1,6 @@
 # AXION
 
-AXION — Counter-Strike 2 va VALORANT turnirlarini boshqarish uchun Next.js platformasi. O‘zbek va ingliz tillari mavjud. Jamoalar turnirga yoziladi. Tashkilotchi turnir ochadi, turnir to‘rini ishga tushiradi va hisoblarni kiritadi. G‘olib keyingi raundga avtomatik o‘tadi.
+AXION — Counter-Strike 2 va VALORANT turnirlarini boshqarish uchun Next.js platformasi. O‘zbek va ingliz tillari hamda yorug‘ va qorong‘i rejimlar mavjud. Jamoalar turnirga yoziladi. Tashkilotchi turnirni yaratadi, tahrirlaydi, o‘chiradi, turnir to‘rini ishga tushiradi va hisoblarni kiritadi. G‘olib keyingi raundga avtomatik o‘tadi.
 
 ## Mahalliy ishga tushirish
 
@@ -23,9 +23,10 @@ npm start
 
 | Manzil | Vazifa |
 | --- | --- |
-| `/` | Scroll bilan boshqariladigan CS2 va VALORANT video sahnalari |
+| `/` | Besh CS2 personaji va VALORANT uchun scroll bilan boshqariladigan video sahnalar |
+| `/cs2` | CS2 personaji kameraga buriladigan alohida scroll videosi |
 | `/turnirlar` | O‘yin, holat va nom bo‘yicha qidirish, jamoani ro‘yxatdan o‘tkazish va natijalarni ko‘rish |
-| `/boshqaruv` | Turnir ochish, jamoalarni ko‘rish, turnirni boshlash va natija kiritish |
+| `/boshqaruv` | Turnir ochish, tahrirlash, o‘chirish, jamoalarni ko‘rish va natija kiritish |
 
 ## Vercel
 
@@ -43,14 +44,13 @@ Qiymatlarni kiritgach, Vercel’da qayta deploy qiling. Umumiy rejimda turnirlar
 
 ## Animatsiya va media
 
-- [React Bits](https://reactbits.dev/) manbasidan Blur Text, Dot Grid va Scroll Reveal ishlatilgan. Litsenziya komponentlar papkasida.
-- CS2 va VALORANT sahnalarida AXION uchun yaratilgan original personajlar va video montajlar ishlatilgan. Har klip uchta rakurs, kamera siljishi va yorug‘lik o‘tishlaridan tuzilgan.
+- [React Bits](https://reactbits.dev/) manbasidan Blur Text, Dot Grid, Scroll Reveal, Fade Content, Glare Hover va Star Border ishlatilgan. Litsenziya komponentlar papkasida.
+- CS2’ning ikkala klipi loyiha egasi taqdim etgan Google Flow videolaridan olingan. VALORANT klipi AXION uchun tayyorlangan.
 - Scroll video kadrini boshqaradi. Video boshqaruvi bilan klipni mustaqil ijro etish mumkin. Tizimda kamaytirilgan harakat tanlanganda scroll animatsiyasi o‘chadi.
 - AXION — mustaqil hamjamiyat loyihasi.
 
-Kliplarni qayta yig‘ish uchun Python, NumPy, OpenCV va FFmpeg kerak.
+VALORANT klipini qayta yig‘ish uchun Python, NumPy, OpenCV va FFmpeg kerak.
 
 ```sh
-python scripts/compose-films.py cs2 scripts/media-source/cs2.jpg
 python scripts/compose-films.py valorant scripts/media-source/valorant.jpg
 ```

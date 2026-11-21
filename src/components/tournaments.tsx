@@ -2,15 +2,22 @@
 
 import { type FormEvent, type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { ArrowRight, CalendarDays, ChevronRight, Crosshair, GitFork, LockKeyhole, Plus, Search, Swords, Trophy, Users, X } from "lucide-react";
+import { ArrowRight, CalendarDays, ChevronRight, Crosshair, GitFork, LockKeyhole, Pencil, Plus, Search, Swords, Trash2, Trophy, Users, X } from "lucide-react";
 import { applyCommand, capacities, dateLabel, games, prizeLabel, statusNames, type Command, type Game, type Tournament } from "@/lib/tournaments";
 import ScrollReveal from "./react-bits/ScrollReveal";
+import BlurText from "./react-bits/BlurText";
+import GlareHover from "./react-bits/GlareHover";
+import FadeContent from "./react-bits/FadeContent";
 import { useLocale } from "./locale";
+import { OptionSelect } from "./option-select";
 
 type View = "preview" | "directory" | "dashboard";
 type Mode = "demo" | "shared" | "loading";
 type Filter = Game | "all";
-type Modal = { id: string; page: "details" | "join" } | { page: "create" | "login" };
+type Modal =
+  | { id: string; page: "details" | "join" | "edit" }
+  | { id: string; page: "delete"; title: string }
+  | { page: "create" | "login" };
 const storageKey = "axion-demo-v1";
 const filters: { key: Filter; label: string }[] = [{ key: "all", label: "Barchasi" }, { key: "cs2", label: "CS2" }, { key: "valorant", label: "VALORANT" }];
 
@@ -131,7 +138,8 @@ export function Tournaments({ initial, view, initialFilter = "all" }: {
       <div className="section-heading">
         <div>
           {preview ? <h2 className="section-title"><ScrollReveal mode="enter" effect="rise" baseRotation={0}>{t("TURNIRLAR.")}</ScrollReveal></h2> :
-            <h1 className="section-title">{t(dashboard ? "BOSHQARUV." : "TURNIRLAR.")}</h1>}
+            <h1 className="section-title"><BlurText key={locale}
+              text={t(dashboard ? "BOSHQARUV." : "TURNIRLAR.")} trigger="load" stepDuration={0.17} distance={11} blur={7} /></h1>}
         </div>
         {preview && <Link className="button button-quiet" href="/turnirlar">{t("Barcha turnirlar")} <ArrowRight size={17} /></Link>}
         {dashboard && (canManage ? <div className="heading-actions">
@@ -153,17 +161,22 @@ export function Tournaments({ initial, view, initialFilter = "all" }: {
           <label className="search"><Search size={17} /><span className="sr-only">{t("Turnir qidirish")}</span>
             <input type="search" placeholder={t("Qidirish")} value={query} onChange={(event) => setQuery(event.target.value)} />
           </label>
-          <select aria-label={t("Turnir holati")} value={status} onChange={(event) => setStatus(event.target.value)}>
-            <option value="all">{t("Barcha holatlar")}</option>
-            {Object.entries(statusNames).map(([key, label]) => <option key={key} value={key}>{t(label)}</option>)}
-          </select>
+          <OptionSelect label={t("Turnir holati")} value={status} onValueChange={setStatus} options={[
+            { value: "all", label: t("Barcha holatlar") },
+            ...Object.entries(statusNames).map(([value, label]) => ({ value, label: t(label) })),
+          ]} />
         </div>
       </div>}
 
       {failure ? <div className="empty-state" role="alert"><p>{t(failure)}</p><button className="button button-quiet" onClick={() => void refresh()}>{t("Qayta yuklash")}</button></div> :
         cards.length ? <div className="tournament-grid">
-          {cards.map((item) => <TournamentCard key={item.id} item={item} onOpen={() => open({ id: item.id, page: "details" })} />)}
-        </div> : <div className="empty-state" role="status"><p>{t(mode === "loading" ? "Turnirlar yuklanmoqda…" : "Turnirlar topilmadi.")}</p></div>}
+          {cards.map((item) => <TournamentCard key={item.id} item={item}
+            onOpen={() => open({ id: item.id, page: "details" })}
+            onEdit={canManage ? () => open({ id: item.id, page: "edit" }) : undefined}
+            onDelete={canManage ? () => open({ id: item.id, page: "delete", title: item.title }) : undefined} />)}
+        </div> : <FadeContent className="empty-state" trigger="mount" effect="focus" duration={0.22} role="status">
+          <p>{t(mode === "loading" ? "Turnirlar yuklanmoqda…" : "Turnirlar topilmadi.")}</p>
+        </FadeContent>}
       {!modal && notice && <p className="feedback" role="status">{t(notice)}</p>}
     </div>
 
@@ -181,6 +194,11 @@ export function Tournaments({ initial, view, initialFilter = "all" }: {
       </div>}
       {selected.matches.length > 0 && <Bracket item={selected} canManage={canManage} busy={busy}
         save={(match, a, b) => update({ kind: "score", id: selected.id, match, a, b }, "Natija saqlandi.")} />}
+      {canManage && <div className="manage-actions">
+        <button className="button button-quiet" type="button" disabled={busy} onClick={() => open({ id: selected.id, page: "edit" })}><Pencil size={16} />{t("Tahrirlash")}</button>
+        <button className="button button-quiet button-remove" type="button" disabled={busy}
+          onClick={() => open({ id: selected.id, page: "delete", title: selected.title })}><Trash2 size={16} />{t("O‘chirish")}</button>
+      </div>}
       {notice && <p className="feedback" role="status">{t(notice)}</p>}
     </Dialog>}
 
@@ -201,32 +219,29 @@ export function Tournaments({ initial, view, initialFilter = "all" }: {
       </form>
     </Dialog>}
 
-    {modal?.page === "create" && canManage && <Dialog key="create" title={t("Turnir yaratish")} close={close} busy={busy}>
-      <form onSubmit={async (event) => {
-        event.preventDefault();
-        const form = new FormData(event.currentTarget);
-        const command: Command = {
-          kind: "create", title: String(form.get("title")), game: form.get("game") as Game,
-          date: `${form.get("date")}:00+05:00`, slots: Number(form.get("slots")), prize: Number(form.get("prize")),
-        };
-        if (await update(command, "Turnir yaratildi.")) {
-          setModal(null);
-          setQuery("");
-          setFilter("all");
-          setStatus("all");
-        }
-      }}>
-        <label>{t("Turnir nomi")}<input name="title" required minLength={3} maxLength={64} /></label>
-        <div className="form-grid">
-          <label>{t("O‘yin")}<select name="game"><option value="cs2">Counter-Strike 2</option><option value="valorant">VALORANT</option></select></label>
-          <label>{t("Joylar")}<select name="slots" defaultValue={8}>{capacities.map((value) => <option key={value}>{value}</option>)}</select></label>
-        </div>
-        <label>{t("Sana va vaqt (Toshkent)")}<input type="datetime-local" name="date" required /></label>
-        <label>{t("Mukofot (so‘m)")}<input type="number" name="prize" min={0} max={1_000_000_000} step={1} defaultValue={0} required /></label>
-        {notice && <p className="feedback" role="alert">{t(notice)}</p>}
-        <div className="dialog-actions"><button className="button button-primary" disabled={busy}>{t(busy ? "Saqlanmoqda…" : "Turnir yaratish")}</button></div>
-      </form>
+    {canManage && (modal?.page === "create" || (modal?.page === "edit" && selected)) &&
+      <Dialog key={selected?.id ? `edit-${selected.id}` : "create"} title={t(selected ? "Turnirni tahrirlash" : "Turnir yaratish")} close={close} busy={busy}>
+      <TournamentForm item={selected} notice={notice} busy={busy} submit={async (command) => {
+        if (!await update(command, selected ? "Turnir yangilandi." : "Turnir yaratildi.")) return;
+        setModal(null);
+        setQuery("");
+        setFilter("all");
+        setStatus("all");
+      }} />
     </Dialog>}
+
+    {canManage && selected && modal?.page === "delete" &&
+      <Dialog key={`delete-${selected.id}`} title={t("Turnirni o‘chirish")} close={close} busy={busy}>
+        <p className="delete-name">{selected.title}</p>
+        <p className="muted">{t("Turnir, jamoalar va natijalar o‘chiriladi.")}</p>
+        {notice && <p className="feedback" role="alert">{t(notice)}</p>}
+        <div className="dialog-actions">
+          <button className="button button-quiet" type="button" autoFocus disabled={busy} onClick={close}>{t("Bekor qilish")}</button>
+          <button className="button button-danger" type="button" disabled={busy} onClick={async () => {
+            if (await update({ kind: "delete", id: selected.id, title: modal.title }, "Turnir o‘chirildi.")) setModal(null);
+          }}><Trash2 size={16} />{t(busy ? "O‘chirilmoqda…" : "O‘chirish")}</button>
+        </div>
+      </Dialog>}
 
     {modal?.page === "login" && <Dialog key="login" title={t("Tashkilotchi kirishi")} close={close} busy={busy}>
       <form onSubmit={async (event) => {
@@ -242,24 +257,61 @@ export function Tournaments({ initial, view, initialFilter = "all" }: {
   </section>;
 }
 
+function TournamentForm({ item, notice, busy, submit }: {
+  item?: Tournament; notice: string; busy: boolean; submit: (command: Command) => Promise<void>;
+}) {
+  const { t } = useLocale();
+  const [game, setGame] = useState<Game>(item?.game ?? "cs2");
+  const [slots, setSlots] = useState(String(item?.slots ?? 8));
+  const startDate = item ? new Date(Date.parse(item.date) + 5 * 60 * 60 * 1000).toISOString().slice(0, 16) : "";
+  return <form onSubmit={(event) => {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const fields = { title: String(form.get("title")), game, date: `${form.get("date")}:00+05:00`,
+      slots: Number(slots), prize: Number(form.get("prize")) };
+    void submit(item ? { kind: "edit", id: item.id, ...fields } : { kind: "create", ...fields });
+  }}>
+    <label>{t("Turnir nomi")}<input name="title" defaultValue={item?.title} required minLength={3} maxLength={64} /></label>
+    <div className="form-grid">
+      <div className="option-field"><span>{t("O‘yin")}</span><OptionSelect inline align="start" label={t("O‘yin")} value={game}
+        onValueChange={(value) => setGame(value as Game)} disabled={Boolean(item && (item.status !== "open" || item.teams.length))}
+        options={Object.entries(games).map(([value, label]) => ({ value, label }))} /></div>
+      <div className="option-field"><span>{t("Joylar")}</span><OptionSelect inline align="start" label={t("Joylar")} value={slots}
+        onValueChange={setSlots} disabled={item && item.status !== "open"}
+        options={capacities.map((value) => ({ value: String(value), label: String(value), disabled: value < (item?.teams.length ?? 0) }))} /></div>
+    </div>
+    <label>{t("Sana va vaqt (Toshkent)")}<input type="datetime-local" name="date" defaultValue={startDate} required /></label>
+    <label>{t("Mukofot (so‘m)")}<input type="number" name="prize" min={0} max={1_000_000_000} step={1} defaultValue={item?.prize ?? 0} required /></label>
+    {notice && <p className="feedback" role="alert">{t(notice)}</p>}
+    <div className="dialog-actions"><button className="button button-primary" disabled={busy}>{t(busy ? "Saqlanmoqda…" : item ? "Saqlash" : "Turnir yaratish")}</button></div>
+  </form>;
+}
+
 function StatusBadge({ item }: { item: Tournament }) {
   const { t } = useLocale();
   return <span className={`status status-${item.status}`}><i />{t(statusNames[item.status])}</span>;
 }
 
-function TournamentCard({ item, onOpen }: { item: Tournament; onOpen: () => void }) {
+function TournamentCard({ item, onOpen, onEdit, onDelete }: {
+  item: Tournament; onOpen: () => void; onEdit?: () => void; onDelete?: () => void;
+}) {
   const game = item.game;
   const { t, locale } = useLocale();
   return <article className={`tournament-card card-${game}`}>
-    <div className="card-visual">
+    <GlareHover className="card-visual" height="auto" width="100%" background="transparent" borderColor="transparent"
+      borderRadius="0" glareOpacity={0.18} glareSize={212} transitionDuration={580} variant="sheen">
       <StatusBadge item={item} />
       <div className="card-game"><Crosshair size={16} /> {games[game]}</div>
-    </div>
+    </GlareHover>
     <div className="card-body">
       <h3>{item.title}</h3>
       <div className="card-meta"><span><CalendarDays size={16} />{dateLabel(item.date, locale)}</span><span><Users size={16} />{item.teams.length}/{item.slots}</span></div>
       <div className="card-bottom"><span><Trophy size={17} /> {prizeLabel(item.prize, locale)}</span>
         <button className="button card-button" onClick={onOpen} aria-label={locale === "en" ? `${item.title} details` : `${item.title} tafsilotlari`}>{t("Tafsilot")} <ChevronRight size={16} /></button></div>
+      {onEdit && <div className="card-management">
+        <button className="button" type="button" onClick={onEdit}><Pencil size={15} />{t("Tahrirlash")}</button>
+        <button className="button button-remove" type="button" onClick={onDelete}><Trash2 size={15} />{t("O‘chirish")}</button>
+      </div>}
     </div>
   </article>;
 }

@@ -12,6 +12,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@radix-ui/react-select": "2.4.1",
     "@vercel/blob": "2.9.0",
     "gsap": "3.15.1",
     "lucide-react": "1.77.0",
