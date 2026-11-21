@@ -60,8 +60,35 @@ export function ArenaScene({ game }: { game: Arena }) {
   const [manual, setManual] = useState(false);
   const [playing, setPlaying] = useState(false);
   const [shouldLoad, setShouldLoad] = useState(game !== "valorant");
+  const [source, setSource] = useState<string>();
   const scene = scenes[game];
   const { locale, t } = useLocale();
+
+  useEffect(() => {
+    if (!shouldLoad) return;
+    if (!window.matchMedia("(max-width: 720px)").matches) {
+      setSource(`/media/${game}.mp4`);
+      return;
+    }
+
+    const path = `/media/${game}-mobile.mp4`;
+    const request = new AbortController();
+    let objectUrl: string | undefined;
+    // Buffer the small mobile clip once so rapid scroll does not interrupt range downloads.
+    void fetch(path, { signal: request.signal }).then(async (response) => {
+      if (!response.ok) throw new Error("Could not buffer the clip");
+      const movie = await response.blob();
+      if (request.signal.aborted) return;
+      objectUrl = URL.createObjectURL(movie);
+      setSource(objectUrl);
+    }).catch(() => {
+      if (!request.signal.aborted) setSource(path);
+    });
+    return () => {
+      request.abort();
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [game, shouldLoad]);
 
   useEffect(() => {
     const section = chapter.current;
@@ -186,10 +213,12 @@ export function ArenaScene({ game }: { game: Arena }) {
   }
 
   return <section className={`arena arena-${game}`} id={game} ref={chapter} aria-label={scene.name}>
+    {game !== "valorant" && <link rel="preload" as="fetch" href={`/media/${game}-mobile.mp4`}
+      media="(max-width: 720px)" crossOrigin="anonymous" />}
     <div className="arena-screen" ref={screen}>
       <div className="arena-visual">
-        <video ref={video} src={shouldLoad ? `/media/${game}.mp4` : undefined} poster={`/media/${game}.webp`}
-          preload={shouldLoad ? "auto" : "none"} muted playsInline loop aria-hidden="true"
+        <video ref={video} src={source} poster={`/media/${game}.webp`}
+          preload={source ? "auto" : "none"} muted playsInline loop aria-hidden="true"
           onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} />
       </div>
       <div className="arena-gradients" />
@@ -218,7 +247,7 @@ export function ArenaScene({ game }: { game: Arena }) {
           <div className="scene-tracker" aria-hidden="true"><span /></div>
           <div className="video-controls">
             {manual && <button className="icon-button" type="button" aria-label={t("Scroll orqali boshqarish")} title={t("Scroll orqali boshqarish")} onClick={resumeScroll}><RotateCcw size={16} /></button>}
-            <button className="icon-button" type="button" aria-label={t(playing ? "Videoni pauza qilish" : "Videoni ijro etish")} onClick={toggleVideo}>
+            <button className="icon-button" type="button" disabled={!source} aria-label={t(playing ? "Videoni pauza qilish" : "Videoni ijro etish")} onClick={toggleVideo}>
               {playing ? <Pause size={17} /> : <Play size={17} />}
             </button>
           </div>
