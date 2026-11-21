@@ -38,6 +38,7 @@ const english: Record<string, string> = {
   "Barchasi": "All games",
   "O‘yin filtri": "Filter by game",
   "Turnir qidirish": "Search tournaments",
+  "Qidirish": "Search",
   "Turnir holati": "Tournament status",
   "Barcha holatlar": "All statuses",
   "Qabul ochiq": "Registration open",

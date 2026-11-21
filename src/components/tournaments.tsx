@@ -151,7 +151,7 @@ export function Tournaments({ initial, view, initialFilter = "all" }: {
         </div>
         <div className="toolbar-inputs">
           <label className="search"><Search size={17} /><span className="sr-only">{t("Turnir qidirish")}</span>
-            <input type="search" placeholder={t("Turnir qidirish")} value={query} onChange={(event) => setQuery(event.target.value)} />
+            <input type="search" placeholder={t("Qidirish")} value={query} onChange={(event) => setQuery(event.target.value)} />
           </label>
           <select aria-label={t("Turnir holati")} value={status} onChange={(event) => setStatus(event.target.value)}>
             <option value="all">{t("Barcha holatlar")}</option>

@@ -1,0 +1,6 @@
+qa/
+scripts/
+test-results/
+playwright-report/
+*.tsbuildinfo
+.env*
