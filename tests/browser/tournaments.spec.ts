@@ -74,7 +74,7 @@ test("organizer can create, edit and finish a tournament, with tied scores rejec
   await expect(dialog.getByText("G‘olib · QA Alpha")).toBeVisible();
   await expect(dialog.getByText("Yakunlangan", { exact: true })).toBeVisible();
 
-  await dialog.getByRole("button", { name: "O‘chirish" }).click();
+  await dialog.getByRole("button", { name: "Turnirni o‘chirish", exact: true }).click();
   await dialog.getByRole("button", { name: "Bekor qilish" }).click();
   await expect(card).toBeVisible();
   await card.getByRole("button", { name: "O‘chirish" }).click();
@@ -82,6 +82,49 @@ test("organizer can create, edit and finish a tournament, with tied scores rejec
   await expect(card).toHaveCount(0);
   await page.reload();
   await expect(card).toHaveCount(0);
+});
+
+test("organizer can edit and remove teams while the public roster hides management and captain names", async ({ page }) => {
+  await page.goto("/boshqaruv");
+  await page.getByRole("button", { name: "AXION Major tafsilotlari" }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByRole("button", { name: "Jamoani tahrirlash (UzCore)" }).click();
+  const name = dialog.getByLabel("Jamoa nomi", { exact: true });
+  await expect(name).toHaveValue("UzCore");
+  await name.fill(" REDLINE ");
+  const captain = dialog.getByLabel("Sardorning o‘yin nomi (ixtiyoriy)");
+  await captain.fill("Test Captain");
+  await dialog.getByRole("button", { name: "Saqlash" }).click();
+  await expect(dialog.getByRole("alert")).toHaveText("Bu nom boshqa jamoaga tegishli.");
+  await expect(captain).toHaveValue("Test Captain");
+  await name.fill("UzCore Prime");
+  await dialog.getByRole("button", { name: "Saqlash" }).click();
+  await expect(dialog.getByRole("status")).toHaveText("Jamoa yangilandi.");
+  await expect(dialog.getByText("Sardor · Test Captain")).toBeVisible();
+
+  const remove = dialog.getByRole("button", { name: "Jamoani o‘chirish (Redline)" });
+  await remove.click();
+  await expect(dialog.getByRole("button", { name: "Bekor qilish" })).toBeFocused();
+  await dialog.getByRole("button", { name: "Bekor qilish" }).click();
+  await expect(remove).toBeVisible();
+  await remove.click();
+  await dialog.getByRole("button", { name: "O‘chirish", exact: true }).click();
+  await expect(dialog.getByRole("status")).toHaveText("Jamoa ro‘yxatdan o‘chirildi.");
+  await expect(dialog.getByText("7/16")).toBeVisible();
+  await expect(remove).toHaveCount(0);
+
+  await page.goto("/turnirlar");
+  await page.getByRole("button", { name: "AXION Major tafsilotlari" }).click();
+  await expect(dialog.getByText("UzCore Prime", { exact: true })).toBeVisible();
+  await expect(dialog.getByText("Redline", { exact: true })).toHaveCount(0);
+  await expect(dialog.getByText("Test Captain", { exact: false })).toHaveCount(0);
+  await expect(dialog.getByRole("button", { name: /Jamoani (tahrirlash|o‘chirish)/ })).toHaveCount(0);
+
+  await page.goto("/boshqaruv");
+  await page.getByRole("button", { name: "Midnight Cup tafsilotlari" }).click();
+  await expect(dialog.getByRole("button", { name: "Jamoani o‘chirish (Nexus)" })).toBeDisabled();
+  await expect(dialog.getByRole("button", { name: "Jamoani tahrirlash (Nexus)" })).toBeEnabled();
+  await expect(dialog.getByText("Turnir boshlangach jamoani o‘chirib bo‘lmaydi.")).toBeVisible();
 });
 
 test("phone keeps the schedule, local times and team names without loading video or organizer controls", async ({ browser, baseURL }) => {
