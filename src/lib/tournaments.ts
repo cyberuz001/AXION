@@ -30,12 +30,16 @@ export interface Tournament {
 }
 
 type TournamentFields = Pick<Tournament, "title" | "game" | "date" | "slots" | "prize">;
+type TeamFields = { name: string; captain: string };
+type TeamChange = { id: string; teamId: string; previousName: string; previousCaptain: string };
 
 export type Command =
   | ({ kind: "create" } & TournamentFields)
   | ({ kind: "edit"; id: string } & TournamentFields)
   | { kind: "delete"; id: string; title: string }
-  | { kind: "join"; id: string; name: string; captain: string }
+  | ({ kind: "join"; id: string } & TeamFields)
+  | ({ kind: "edit-team" } & TeamChange & TeamFields)
+  | ({ kind: "delete-team" } & TeamChange)
   | { kind: "start"; id: string }
   | { kind: "score"; id: string; match: string; a: number; b: number };
 
@@ -70,6 +74,19 @@ export class TournamentError extends Error {}
 
 function teamNameKey(name: string) {
   return name.normalize("NFKC").trim().replace(/\s+/g, " ").toLowerCase();
+}
+
+function normalizeTeam({ name, captain }: TeamFields): TeamFields {
+  return { name: name.trim().replace(/\s+/g, " "), captain: captain.trim().replace(/\s+/g, " ") };
+}
+
+function hasTeamName(teams: Team[], name: string, exceptId?: string) {
+  const key = teamNameKey(name);
+  return teams.some((team) => team.id !== exceptId && teamNameKey(team.name) === key);
+}
+
+export function canRemoveTeam(tournament: Tournament) {
+  return tournament.status === "open" && tournament.matches.length === 0;
 }
 
 function normalizeFields({ title, game, date, slots, prize }: TournamentFields): TournamentFields {
@@ -110,18 +127,35 @@ export function applyCommand(items: Tournament[], command: Command, id: string):
   }
 
   if (command.kind === "join") {
-    const name = command.name.trim().replace(/\s+/g, " ");
-    const captain = command.captain.trim().replace(/\s+/g, " ");
     if (changed.status !== "open") throw new TournamentError("Ro‘yxatdan o‘tish yopilgan.");
+    const { name, captain } = normalizeTeam(command);
     if (name.length < 2 || name.length > 32 || captain.length < 2 || captain.length > 32) {
       throw new TournamentError("Jamoa va sardor nomi 2–32 belgidan iborat bo‘lsin.");
     }
-    const key = teamNameKey(name);
-    if (changed.teams.some((team) => teamNameKey(team.name) === key)) {
+    if (hasTeamName(changed.teams, name)) {
       throw new TournamentError("Bu jamoa allaqachon ro‘yxatdan o‘tgan.");
     }
     if (changed.teams.length >= changed.slots) throw new TournamentError("Bo‘sh joy qolmagan.");
     changed.teams = [...changed.teams, { id, name, captain }];
+  }
+
+  if (command.kind === "edit-team" || command.kind === "delete-team") {
+    const team = current.teams.find((entry) => entry.id === command.teamId);
+    if (!team) throw new TournamentError("Jamoa topilmadi. Sahifani yangilang.");
+    if (team.name !== command.previousName || (team.captain ?? "") !== command.previousCaptain) {
+      throw new TournamentError("Jamoa ma’lumotlari o‘zgargan. Sahifani yangilang.");
+    }
+    if (command.kind === "delete-team") {
+      if (!canRemoveTeam(current)) throw new TournamentError("Turnir boshlangach jamoani o‘chirib bo‘lmaydi.");
+      changed.teams = current.teams.filter((entry) => entry.id !== team.id);
+    } else {
+      const { name, captain } = normalizeTeam(command);
+      if (name.length < 2 || name.length > 32 || (captain && (captain.length < 2 || captain.length > 32))) {
+        throw new TournamentError("Jamoa nomi 2–32 belgidan iborat bo‘lsin. Sardor nomi kiritilsa, u ham 2–32 belgi bo‘lsin.");
+      }
+      if (hasTeamName(current.teams, name, team.id)) throw new TournamentError("Bu nom boshqa jamoaga tegishli.");
+      changed.teams = current.teams.map((entry) => entry.id === team.id ? { ...entry, name, captain: captain || undefined } : entry);
+    }
   }
 
   if (command.kind === "start") {
@@ -220,6 +254,13 @@ export function readCommand(input: unknown): Command {
     if (data.kind === "delete" && typeof data.title === "string") return { kind: "delete", id: data.id, title: data.title };
     if (data.kind === "join" && typeof data.name === "string" && typeof data.captain === "string") {
       return { kind: data.kind, id: data.id, name: data.name, captain: data.captain };
+    }
+    if (typeof data.teamId === "string" && typeof data.previousName === "string" && typeof data.previousCaptain === "string") {
+      const team = { id: data.id, teamId: data.teamId, previousName: data.previousName, previousCaptain: data.previousCaptain };
+      if (data.kind === "delete-team") return { kind: data.kind, ...team };
+      if (data.kind === "edit-team" && typeof data.name === "string" && typeof data.captain === "string") {
+        return { kind: data.kind, ...team, name: data.name, captain: data.captain };
+      }
     }
     if (data.kind === "start") return { kind: data.kind, id: data.id };
     if (data.kind === "score" && typeof data.match === "string" && typeof data.a === "number" && typeof data.b === "number") {

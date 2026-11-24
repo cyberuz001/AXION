@@ -3,7 +3,7 @@
 import { type FormEvent, type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { ArrowRight, CalendarDays, ChevronRight, Crosshair, GitFork, LockKeyhole, Pencil, Plus, Search, Swords, Trash2, Trophy, Users, X } from "lucide-react";
-import { applyCommand, capacities, games, prizeLabel, startLabel, statusNames, type Command, type Game, type Tournament } from "@/lib/tournaments";
+import { applyCommand, canRemoveTeam, capacities, games, prizeLabel, startLabel, statusNames, type Command, type Game, type Team, type Tournament } from "@/lib/tournaments";
 import ScrollReveal from "./react-bits/ScrollReveal";
 import BlurText from "./react-bits/BlurText";
 import GlareHover from "./react-bits/GlareHover";
@@ -16,9 +16,11 @@ type View = "preview" | "directory" | "dashboard" | "schedule";
 type Mode = "demo" | "shared" | "loading";
 type Filter = Game | "all";
 type Notice = { kind: "success" | "error"; message: string; match?: string };
+type TeamCommand = Extract<Command, { kind: "edit-team" | "delete-team" }>;
 type Modal =
   | { id: string; page: "details" | "join" | "edit" }
   | { id: string; page: "delete"; title: string }
+  | { id: string; page: "edit-team" | "delete-team"; team: Team }
   | { page: "create" | "login" };
 const storageKey = "axion-demo-v1";
 const filters: { key: Filter; label: string }[] = [{ key: "all", label: "Barchasi" }, { key: "cs2", label: "CS2" }, { key: "valorant", label: "VALORANT" }];
@@ -136,6 +138,12 @@ export function Tournaments({ initial, view, initialFilter = "all" }: {
     setNotice(null);
   }
 
+  async function modifyTeam(command: TeamCommand) {
+    if (await update(command, command.kind === "edit-team" ? "Jamoa yangilandi." : "Jamoa ro‘yxatdan o‘chirildi.")) {
+      setModal({ id: command.id, page: "details" });
+    }
+  }
+
   const selected = modal && "id" in modal ? items.find(({ id }) => id === modal.id) : undefined;
   const canManage = dashboard && (organizer || mode === "demo");
   const visible = items.filter((item) => (filter === "all" || item.game === filter) &&
@@ -212,8 +220,10 @@ export function Tournaments({ initial, view, initialFilter = "all" }: {
         <time dateTime={selected.date}>{startLabel(selected.date, locale)}</time><span>{prizeLabel(selected.prize, locale)}</span></div>
       {!notice?.match && <Feedback notice={notice} />}
       <h3><Users size={19} /> {t("Jamoalar")} <small>{selected.teams.length}/{selected.slots}</small></h3>
-      {selected.teams.length ? <div className="team-list">{selected.teams.map((team) => <span key={team.id}>{team.name}
-        {canManage && team.captain && <small>{team.captain}</small>}</span>)}</div> : <p className="muted">{t("Jamoalar hali ro‘yxatdan o‘tmagan.")}</p>}
+      {selected.teams.length ? canManage ? <TeamRoster tournament={selected} busy={busy}
+        manage={(page, team) => open({ id: selected.id, page, team })} /> :
+        <div className="team-list">{selected.teams.map((team) => <span key={team.id}>{team.name}</span>)}</div> :
+        <p className="muted">{t("Jamoalar hali ro‘yxatdan o‘tmagan.")}</p>}
       {selected.status === "open" && <div className="dialog-actions">
         <button className="button button-primary" disabled={busy || mode === "loading" || selected.teams.length >= selected.slots} onClick={() => open({ id: selected.id, page: "join" })}>
           {t(selected.teams.length >= selected.slots ? "Joy qolmagan" : "Jamoani ro‘yxatdan o‘tkazish")}
@@ -226,28 +236,42 @@ export function Tournaments({ initial, view, initialFilter = "all" }: {
       {selected.matches.length > 0 && <Bracket item={selected} canManage={canManage} busy={busy} notice={notice}
         save={(match, a, b) => update({ kind: "score", id: selected.id, match, a, b }, "Natija saqlandi.")} />}
       {canManage && <div className="manage-actions">
-        <button className="button button-quiet" type="button" disabled={busy} onClick={() => open({ id: selected.id, page: "edit" })}><Pencil size={16} />{t("Tahrirlash")}</button>
+        <button className="button button-quiet" type="button" disabled={busy} onClick={() => open({ id: selected.id, page: "edit" })}><Pencil size={16} />{t("Turnirni tahrirlash")}</button>
         <button className="button button-quiet button-remove" type="button" disabled={busy}
-          onClick={() => open({ id: selected.id, page: "delete", title: selected.title })}><Trash2 size={16} />{t("O‘chirish")}</button>
+          onClick={() => open({ id: selected.id, page: "delete", title: selected.title })}><Trash2 size={16} />{t("Turnirni o‘chirish")}</button>
       </div>}
     </Dialog>}
 
     {selected && modal?.page === "join" && <Dialog key={`join-${selected.id}`} title={t("Jamoani ro‘yxatdan o‘tkazish")} close={close} busy={busy}>
       <p className="muted">{selected.title} · {games[selected.game]} · <time dateTime={selected.date}>{startLabel(selected.date, locale)}</time></p>
-      <form onSubmit={async (event) => {
-        event.preventDefault();
-        const form = new FormData(event.currentTarget);
-        if (await update({ kind: "join", id: selected.id, name: String(form.get("name")), captain: String(form.get("captain")) }, "Jamoa ro‘yxatdan o‘tdi.")) {
+      <TeamForm notice={notice} busy={busy} back={() => open({ id: selected.id, page: "details" })} submit={async (fields) => {
+        if (await update({ kind: "join", id: selected.id, ...fields }, "Jamoa ro‘yxatdan o‘tdi.")) {
           setModal({ id: selected.id, page: "details" });
         }
-      }}>
-        <label>{t("Jamoa nomi")}<input name="name" required minLength={2} maxLength={32} autoComplete="organization" autoFocus /></label>
-        <label>{t("Sardorning o‘yin nomi")}<input name="captain" required minLength={2} maxLength={32} autoComplete="nickname" /></label>
-        <Feedback notice={notice} />
-        <div className="dialog-actions"><button type="button" className="button button-quiet" disabled={busy} onClick={() => open({ id: selected.id, page: "details" })}>{t("Orqaga")}</button>
-          <button className="button button-primary" disabled={busy}>{t(busy ? "Saqlanmoqda…" : "Ro‘yxatdan o‘tish")}</button></div>
-      </form>
+      }} />
     </Dialog>}
+
+    {canManage && selected && modal?.page === "edit-team" &&
+      <Dialog key={`edit-team-${selected.id}-${modal.team.id}`} title={t("Jamoani tahrirlash")} close={close} busy={busy}>
+        <p className="muted">{selected.title}</p>
+        <TeamForm team={modal.team} notice={notice} busy={busy} back={() => open({ id: selected.id, page: "details" })}
+          submit={(fields) => modifyTeam({ kind: "edit-team", ...teamTarget(selected.id, modal.team), ...fields })} />
+      </Dialog>}
+
+    {canManage && selected && modal?.page === "delete-team" &&
+      <Dialog key={`delete-team-${selected.id}-${modal.team.id}`} title={t("Jamoani o‘chirish")} close={close} busy={busy}>
+        <p className="delete-name">{modal.team.name}</p>
+        <p className="muted">{selected.title} · {t("Jamoa turnir ro‘yxatidan o‘chiriladi va joy bo‘shaydi.")}</p>
+        <Feedback notice={notice} />
+        <div className="dialog-actions">
+          <button className="button button-quiet" type="button" data-dialog-focus disabled={busy}
+            onClick={() => open({ id: selected.id, page: "details" })}>{t("Bekor qilish")}</button>
+          <button className="button button-danger" type="button" disabled={busy}
+            onClick={() => void modifyTeam({ kind: "delete-team", ...teamTarget(selected.id, modal.team) })}>
+            <Trash2 size={16} />{t(busy ? "O‘chirilmoqda…" : "O‘chirish")}
+          </button>
+        </div>
+      </Dialog>}
 
     {canManage && (modal?.page === "create" || (modal?.page === "edit" && selected)) &&
       <Dialog key={selected?.id ? `edit-${selected.id}` : "create"} title={t(selected ? "Turnirni tahrirlash" : "Turnir yaratish")} close={close} busy={busy}>
@@ -266,7 +290,7 @@ export function Tournaments({ initial, view, initialFilter = "all" }: {
         <p className="muted">{t("Turnir, jamoalar va natijalar o‘chiriladi.")}</p>
         <Feedback notice={notice} />
         <div className="dialog-actions">
-          <button className="button button-quiet" type="button" autoFocus disabled={busy} onClick={close}>{t("Bekor qilish")}</button>
+          <button className="button button-quiet" type="button" data-dialog-focus disabled={busy} onClick={close}>{t("Bekor qilish")}</button>
           <button className="button button-danger" type="button" disabled={busy} onClick={async () => {
             if (await update({ kind: "delete", id: selected.id, title: modal.title }, "Turnir o‘chirildi.")) setModal(null);
           }}><Trash2 size={16} />{t(busy ? "O‘chirilmoqda…" : "O‘chirish")}</button>
@@ -292,6 +316,55 @@ function Feedback({ notice }: { notice: Notice | null }) {
   if (!notice) return null;
   const error = notice.kind === "error";
   return <p className={`feedback${error ? " feedback-error" : ""}`} role={error ? "alert" : "status"}>{t(notice.message)}</p>;
+}
+
+type TeamFields = { name: string; captain: string };
+
+function teamTarget(id: string, team: Team) {
+  return { id, teamId: team.id, previousName: team.name, previousCaptain: team.captain ?? "" };
+}
+
+function TeamForm({ team, notice, busy, back, submit }: {
+  team?: Team; notice: Notice | null; busy: boolean; back: () => void; submit: (fields: TeamFields) => Promise<void>;
+}) {
+  const { t } = useLocale();
+  return <form onSubmit={(event) => {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    void submit({ name: String(form.get("name")), captain: String(form.get("captain")) });
+  }}>
+    <label>{t("Jamoa nomi")}<input name="name" defaultValue={team?.name} required minLength={2} maxLength={32} autoComplete="organization" data-dialog-focus /></label>
+    <label>{t(team ? "Sardorning o‘yin nomi (ixtiyoriy)" : "Sardorning o‘yin nomi")}
+      <input name="captain" defaultValue={team?.captain} required={!team} minLength={2} maxLength={32} autoComplete="nickname" />
+    </label>
+    <Feedback notice={notice} />
+    <div className="dialog-actions">
+      <button type="button" className="button button-quiet" disabled={busy} onClick={back}>{t("Orqaga")}</button>
+      <button className="button button-primary" disabled={busy}>{t(busy ? "Saqlanmoqda…" : team ? "Saqlash" : "Ro‘yxatdan o‘tish")}</button>
+    </div>
+  </form>;
+}
+
+function TeamRoster({ tournament, busy, manage }: {
+  tournament: Tournament; busy: boolean; manage: (page: "edit-team" | "delete-team", team: Team) => void;
+}) {
+  const { t } = useLocale();
+  const removable = canRemoveTeam(tournament);
+  return <>
+    {!removable && <p className="muted team-roster-help" id="team-remove-help">{t("Turnir boshlangach jamoani o‘chirib bo‘lmaydi.")}</p>}
+    <ul className="team-roster" aria-label={t("Jamoalar")}>
+      {tournament.teams.map((team) => <li key={team.id}>
+        <div className="team-roster-name"><strong>{team.name}</strong>{team.captain && <small>{t("Sardor")} · {team.captain}</small>}</div>
+        <div className="team-roster-actions">
+          <button type="button" className="button button-quiet" disabled={busy} aria-label={`${t("Jamoani tahrirlash")} (${team.name})`}
+            onClick={() => manage("edit-team", team)}><Pencil size={15} />{t("Tahrirlash")}</button>
+          <button type="button" className="button button-quiet button-remove" disabled={busy || !removable}
+            aria-label={`${t("Jamoani o‘chirish")} (${team.name})`} aria-describedby={removable ? undefined : "team-remove-help"}
+            onClick={() => manage("delete-team", team)}><Trash2 size={15} />{t("O‘chirish")}</button>
+        </div>
+      </li>)}
+    </ul>
+  </>;
 }
 
 function TournamentForm({ item, notice, busy, submit }: {
@@ -357,7 +430,12 @@ function TournamentCard({ item, onOpen, onEdit, onDelete }: {
 function Dialog({ title, close, busy, wide, children }: { title: string; close: () => void; busy: boolean; wide?: boolean; children: ReactNode }) {
   const ref = useRef<HTMLDialogElement>(null);
   const { t } = useLocale();
-  useEffect(() => { ref.current?.showModal(); }, []);
+  useEffect(() => {
+    const dialog = ref.current;
+    if (!dialog || dialog.open) return;
+    dialog.showModal();
+    dialog.querySelector<HTMLElement>("[data-dialog-focus]")?.focus();
+  }, []);
   return <dialog ref={ref} className={wide ? "dialog dialog-wide" : "dialog"} aria-labelledby="dialog-title"
     onCancel={(event) => { event.preventDefault(); if (!busy) close(); }}
     onClick={(event) => { if (event.target === event.currentTarget && !busy) close(); }}>
