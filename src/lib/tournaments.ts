@@ -47,11 +47,18 @@ const monthsEn = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep",
 const tashkentDate = new Intl.DateTimeFormat("en-GB", {
   day: "numeric", month: "numeric", year: "numeric", timeZone: "Asia/Tashkent",
 });
+const tashkentTime = new Intl.DateTimeFormat("en-GB", {
+  hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZone: "Asia/Tashkent",
+});
 
 export function dateLabel(date: string, locale: "uz" | "en" = "uz") {
   const [day, month, year] = tashkentDate.format(new Date(date)).split("/");
   if (locale === "en") return `${Number(day)} ${monthsEn[Number(month) - 1]} ${year}`;
   return `${Number(day)}-${months[Number(month) - 1]}, ${year}`;
+}
+
+export function startLabel(date: string, locale: "uz" | "en" = "uz") {
+  return `${dateLabel(date, locale)} · ${tashkentTime.format(new Date(date))} (UTC+5)`;
 }
 
 export function prizeLabel(prize: number, locale: "uz" | "en" = "uz") {
@@ -60,6 +67,10 @@ export function prizeLabel(prize: number, locale: "uz" | "en" = "uz") {
 }
 
 export class TournamentError extends Error {}
+
+function teamNameKey(name: string) {
+  return name.normalize("NFKC").trim().replace(/\s+/g, " ").toLowerCase();
+}
 
 function normalizeFields({ title, game, date, slots, prize }: TournamentFields): TournamentFields {
   const name = title.trim();
@@ -105,7 +116,8 @@ export function applyCommand(items: Tournament[], command: Command, id: string):
     if (name.length < 2 || name.length > 32 || captain.length < 2 || captain.length > 32) {
       throw new TournamentError("Jamoa va sardor nomi 2–32 belgidan iborat bo‘lsin.");
     }
-    if (changed.teams.some((team) => team.name.normalize("NFKC").toLowerCase() === name.normalize("NFKC").toLowerCase())) {
+    const key = teamNameKey(name);
+    if (changed.teams.some((team) => teamNameKey(team.name) === key)) {
       throw new TournamentError("Bu jamoa allaqachon ro‘yxatdan o‘tgan.");
     }
     if (changed.teams.length >= changed.slots) throw new TournamentError("Bo‘sh joy qolmagan.");

@@ -250,6 +250,8 @@ input::placeholder { color: var(--muted); }
 .card-management .button:hover { background: var(--wash); }
 .empty-state { display: grid; justify-items: center; gap: 12px; padding: 38px 15px; border: 1px dashed var(--border); text-align: center; }
 .feedback { margin-top: 10px; font-weight: 710; }
+.feedback-error { color: var(--danger); }
+.match > .feedback { padding: 0 5px 7px; }
 
 .dialog { --dialog-width: 490px; width: min(calc(100% - 24px), var(--dialog-width)); max-width: none; max-height: calc(100dvh - 30px); color: var(--ink); background: var(--panel); border: 1px solid var(--border); border-radius: 2px; padding: 0; box-shadow: 0 22px 90px #0006; }
 .dialog-wide { --dialog-width: 850px; }
