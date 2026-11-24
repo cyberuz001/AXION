@@ -29,3 +29,9 @@ test("T02: a duplicate team is rejected without changing the roster", () => {
   );
   assert.deepEqual(registered, snapshot);
 });
+
+test("compatibility normalization also collapses spaces introduced by Unicode", () => {
+  const join = { kind: "join", id: "cup", name: "AXION ¨", captain: "Demo Captain" };
+  const registered = applyCommand(openTournament(), join, "team-axion");
+  assert.throws(() => applyCommand(registered, { ...join, name: "AXION \u0308" }, "duplicate"), TournamentError);
+});
