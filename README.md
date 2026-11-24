@@ -2,6 +2,10 @@
 
 AXION — Counter-Strike 2 va VALORANT turnirlarini boshqarish uchun Next.js platformasi. O‘zbek va ingliz tillari hamda yorug‘ va qorong‘i rejimlar mavjud. Jamoalar turnirga yoziladi. Tashkilotchi turnirni yaratadi, tahrirlaydi, o‘chiradi, turnir to‘rini ishga tushiradi va hisoblarni kiritadi. G‘olib keyingi raundga avtomatik o‘tadi.
 
+[Jonli platforma](https://axion-ecru.vercel.app/) · [Ochiq repozitoriy](https://github.com/cyberuz001/AXION)
+
+Interfeys React va Next.js App Router’da ishlaydi. Next.js Route Handler’lari jamoa va turnir amallarini bajaradi. Umumiy rejimda turnirlar Vercel Blob’da saqlanadi.
+
 ## Mahalliy ishga tushirish
 
 Node.js 22 yoki yangiroq versiyasi kerak.
@@ -14,8 +18,9 @@ npm run dev
 Sayt [localhost:3000](http://localhost:3000) manzilida ochiladi. Sozlamalarsiz sayt demo ma’lumotlarini ko‘rsatadi va o‘zgarishlarni shu brauzerda saqlaydi.
 
 ```sh
-npm run typecheck
+node --test tests/*.test.mjs
 npm run build
+npm run typecheck
 npm start
 ```
 
@@ -27,6 +32,10 @@ npm start
 | `/cs2` | CS2 personaji kameraga buriladigan alohida scroll videosi |
 | `/turnirlar` | O‘yin, holat va nom bo‘yicha qidirish, jamoani ro‘yxatdan o‘tkazish va natijalarni ko‘rish |
 | `/boshqaruv` | Turnir ochish, tahrirlash, o‘chirish, jamoalarni ko‘rish va natija kiritish |
+
+## Ro‘yxatdan o‘tish qoidasi
+
+Bir turnirda jamoa nomi takrorlanmaydi. Qoida nomning bo‘shliqlari, harf kattaligi va Unicode yozilishidagi farqlarni hisobga oladi. Qabul va rad holatlarini birga tekshirish uchun `node --test tests/registration.test.mjs` buyrug‘ini ishlating. Sinov AXION biznes mantiqini chaqiradi va sun’iy turnir holatidan foydalanadi.
 
 ## Vercel
 
@@ -46,7 +55,7 @@ Qiymatlarni kiritgach, Vercel’da qayta deploy qiling. Umumiy rejimda turnirlar
 
 - [React Bits](https://reactbits.dev/) manbasidan Blur Text, Dot Grid, Scroll Reveal, Fade Content, Glare Hover va Star Border ishlatilgan. Litsenziya komponentlar papkasida.
 - CS2’ning ikkala klipi loyiha egasi taqdim etgan Google Flow videolaridan olingan. VALORANT klipi AXION uchun tayyorlangan.
-- Scroll video kadrini boshqaradi. Video boshqaruvi bilan klipni mustaqil ijro etish mumkin. Tizimda kamaytirilgan harakat tanlanganda scroll animatsiyasi o‘chadi.
+- Scroll videoning kadri va sahnadagi o‘rnini boshqaradi. Mobil qurilmalarda turnir nomlari, Toshkent vaqti va jamoalari ko‘rsatiladigan ixcham jadval ochiladi. Kamaytirilgan harakat tanlanganda video va scroll effektlari statik ko‘rinishga o‘tadi.
 - AXION — mustaqil hamjamiyat loyihasi.
 
 VALORANT klipini qayta yig‘ish uchun Python, NumPy, OpenCV va FFmpeg kerak.
